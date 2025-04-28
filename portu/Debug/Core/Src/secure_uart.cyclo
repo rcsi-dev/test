@@ -1,0 +1,17 @@
+../Core/Src/secure_uart.c:35:9:SecureUart_Init	3
+../Core/Src/secure_uart.c:102:13:SecureUart_SendFromUart1	3
+../Core/Src/secure_uart.c:133:13:SecureUart_SendFromUart6	3
+../Core/Src/secure_uart.c:164:6:SecureUart_Debug	1
+../Core/Src/secure_uart.c:172:13:SecureUart_PrintBuffer	6
+../Core/Src/secure_uart.c:197:13:SecureUart_InitCRC32Table	3
+../Core/Src/secure_uart.c:211:10:SecureUart_CalculateCRC32	2
+../Core/Src/secure_uart.c:224:10:SecureUart_BuildFrame	1
+../Core/Src/secure_uart.c:252:13:SecureUart_ParseFrame	6
+../Core/Src/secure_uart.c:294:6:SecureUart_RxCpltCallback_UART1	1
+../Core/Src/secure_uart.c:309:6:SecureUart_RxCpltCallback_UART6	1
+../Core/Src/secure_uart.c:324:6:SecureUart_TxCpltCallback_UART1	1
+../Core/Src/secure_uart.c:332:6:SecureUart_TxCpltCallback_UART6	1
+../Core/Src/secure_uart.c:340:9:SecureUart_IsDataReceived	3
+../Core/Src/secure_uart.c:347:6:SecureUart_Process	5
+../Core/Src/secure_uart.c:415:6:HAL_UARTEx_RxEventCallback	3
+../Core/Src/secure_uart.c:436:6:HAL_UART_TxCpltCallback	3

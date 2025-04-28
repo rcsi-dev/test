@@ -1,0 +1,51 @@
+/* uart_protocol.h */
+#ifndef UART_PROTOCOL_H
+#define UART_PROTOCOL_H
+
+#include "main.h"
+#include <stdint.h>
+#include <string.h>
+#include <stdio.h>
+
+// Определение констант для протокола
+#define FRAME_START_MARKER      0xAA55  // Маркер начала фрейма
+#define FRAME_END_MARKER        0x55AA  // Маркер конца фрейма
+#define MAX_DATA_SIZE           256     // Максимальный размер данных во фрейме
+
+// Структура фрейма
+typedef struct {
+    uint16_t start_marker;       // Маркер начала фрейма
+    uint16_t data_length;        // Длина данных
+    uint8_t data[MAX_DATA_SIZE]; // Данные
+    uint32_t crc;                // CRC32
+    uint16_t end_marker;         // Маркер конца фрейма
+} UartFrame;
+
+// Состояния для парсера фрейма
+typedef enum {
+    WAIT_START,      // Ожидание маркера начала
+    READ_LENGTH,     // Чтение длины данных
+    READ_DATA,       // Чтение данных
+    READ_CRC,        // Чтение CRC
+    READ_END         // Чтение маркера конца
+} FrameParseState;
+
+// Буфер для приема данных
+typedef struct {
+    uint8_t buffer[sizeof(UartFrame)];  // Буфер для хранения данных
+    uint16_t position;                  // Текущая позиция в буфере
+    FrameParseState state;              // Текущее состояние парсера
+} RxBuffer;
+
+// Функции для работы с протоколом
+void UartProtocol_Init(void);
+void UartProtocol_SendFrame(UART_HandleTypeDef *huart, uint8_t *data, uint16_t length);
+void UartProtocol_ProcessRxByte(UART_HandleTypeDef *huart, uint8_t byte);
+uint32_t UartProtocol_CalculateCRC(uint8_t *data, uint16_t length);
+
+// Внешние объявления
+extern UART_HandleTypeDef huart1;
+extern UART_HandleTypeDef huart2;
+extern UART_HandleTypeDef huart6;
+
+#endif /* UART_PROTOCOL_H */

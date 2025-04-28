@@ -1,2 +1,0 @@
-../Core/Src/siphash.c:45:10:SipHash_2_4	12
-../Core/Src/siphash.c:110:6:SipHash_2_4_MAC	1
