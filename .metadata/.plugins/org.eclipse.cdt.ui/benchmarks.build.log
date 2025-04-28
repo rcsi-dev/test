@@ -1,0 +1,24 @@
+18:35:16 **** Incremental Build of configuration Debug for project benchmarks ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:93:3: warning: implicit declaration of function 'debug_printf' [-Wimplicit-function-declaration]
+   93 |   debug_printf("\r\n\r\n");
+      |   ^~~~~~~~~~~~
+../Core/Src/main.c:101:3: warning: implicit declaration of function 'run_benchmarks' [-Wimplicit-function-declaration]
+  101 |   run_benchmarks();
+      |   ^~~~~~~~~~~~~~
+arm-none-eabi-gcc -o "benchmarks.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\benchmarks\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="benchmarks.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: benchmarks.elf
+ 
+arm-none-eabi-size  benchmarks.elf 
+arm-none-eabi-objdump -h -S benchmarks.elf  > "benchmarks.list"
+   text	   data	    bss	    dec	    hex	filename
+  15400	     92	  10452	  25944	   6558	benchmarks.elf
+Finished building: default.size.stdout
+ 
+Finished building: benchmarks.list
+ 
+
+18:35:17 Build Finished. 0 errors, 2 warnings. (took 976ms)
+

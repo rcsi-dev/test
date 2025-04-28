@@ -1,0 +1,250 @@
+/*
+ * secure_uart.c
+ *
+ *  Created on: Apr 24, 2025
+ *      Author: rcsi
+ *
+ * Compact implementation of the protected UART frame described in the thesis.
+ * Usage (simplified):
+ *   uint8_t frame[SECURE_UART_MAX_FRAME];
+ *   uint8_t frame_len;
+ *   secure_uart_build(payload, payload_len, frame, &frame_len);
+ *   HAL_UART_Transmit(&huart1, frame, frame_len, HAL_MAX_DELAY);
+ *
+ *   // In Rx callback
+ *   uint8_t out[SECURE_UART_MAX_PAYLOAD];
+ *   secure_uart_status_t st = secure_uart_parse(buf, size, out, &out_len);
+ *
+ * The module uses:
+ *   - hardware CRC32 (HAL_CRC_Calculate) through an external CRC handle (must be initialised once).
+ *   - SPECK‑64/96 for optional encryption (enable with SECURE_UART_USE_ENCRYPTION).
+ *   - SipHash‑128/2‑4 truncated to 64 bits for MAC.
+ * Memory footprint < 5 kB Flash.
+ */
+
+#include "main.h"
+#include "secure_uart.h"
+#include "stm32f4xx_hal.h"
+#include <string.h>
+
+/* -------------------------------------------------------------------------- */
+/*  ** Build options **                                                       */
+/* -------------------------------------------------------------------------- */
+#define SECURE_UART_USE_ENCRYPTION   1        /* 0 = no encryption             */
+
+/* -------------------------------------------------------------------------- */
+/*  ** Constants **                                                           */
+/* -------------------------------------------------------------------------- */
+#define SYNC_HIGH   0x55
+#define SYNC_LOW    0xAA
+#define SYNC_LEN    2
+#define LEN_LEN     1
+#define CNT_LEN     1
+#define CRC_LEN     4
+#define MAC_LEN     8
+
+/* -------------------------------------------------------------------------- */
+/*  ** Keys (replace with your own) **                                        */
+/* -------------------------------------------------------------------------- */
+static const uint32_t siphash_key[4] = {0x01234567,0x89ABCDEF,0x0BADF00D,0xDEADBEEF};
+#if SECURE_UART_USE_ENCRYPTION
+static const uint32_t speck_k96[3]  = {0xA56BABCD,0x00010203,0xF0E1D2C3};
+#endif
+
+/* rolling counter (node‑local) */
+static uint8_t cnt_tx = 0;
+static uint8_t cnt_rx_last = 0;   /* last accepted counter */
+
+/* HAL CRC handle (extern, created by CubeMX) */
+extern CRC_HandleTypeDef hcrc;
+
+/* -------------------------------------------------------------------------- */
+/*  ** SPECK‑64/96 (26 rounds) **                                             */
+/* -------------------------------------------------------------------------- */
+#if SECURE_UART_USE_ENCRYPTION
+#define ROR(x,r)  ( ((x) >> (r)) | ((x) << (32 - (r))) )
+#define ROL(x,r)  ( ((x) << (r)) | ((x) >> (32 - (r))) )
+static void speck64_key_schedule(const uint32_t k[3], uint32_t rk[26])
+{
+    uint32_t x = k[2];          /* K2 */
+    uint32_t y = k[1];          /* K1 */
+
+    rk[0] = k[0];               /* rk0 = K0 */
+
+    for (uint8_t i = 0; i < 25; ++i)    /* итерации i = 0 … 24 (получаем rk1..rk25) */
+    {
+        x = (ROR(x, 8) + y) ^  i;       /* x(i+3) */
+        y =  ROR(y, 3) ^ x;             /* y(i+3) */
+        rk[i + 1] = x;                  /* сохраняем новый раунд-ключ */
+    }
+}
+static void speck64_encrypt(uint16_t rk[26], uint16_t p[2])
+{
+	uint16_t x=p[0], y=p[1];
+	for(int i=0;i<26;i++){
+		x=ROLR(x,7); x+=y; x^=rk[i];
+		y=ROLL(y,2); y^=x;
+	}
+	p[0]=x; p[1]=y;
+}
+static void speck64_decrypt(uint16_t rk[26], uint16_t ct[2])
+{
+	uint16_t x=ct[0], y=ct[1];
+	for(int i=25;i>=0;i--){
+		y^=x; y=ROLR(y,2);
+		x^=rk[i]; x-=y; x=ROLL(x,7);
+	}
+	ct[0]=x; ct[1]=y;
+}
+#endif
+
+/* -------------------------------------------------------------------------- */
+/*  ** SipHash‑128/2‑4 (returns 64‑bit) **                                   */
+/*  Reference: https://131002.net/siphash/ (public domain)                    */
+/* -------------------------------------------------------------------------- */
+static uint64_t U8TO64_LE(const uint8_t *p){
+	return ((uint64_t) p[0]      ) | ((uint64_t) p[1] <<  8) |
+			((uint64_t) p[2] << 16) | ((uint64_t) p[3] << 24) |
+			((uint64_t) p[4] << 32) | ((uint64_t) p[5] << 40) |
+			((uint64_t) p[6] << 48) | ((uint64_t) p[7] << 56);
+}
+#define ROTL64(x,b) (((x) << (b)) | ((x) >> (64 - (b))))
+static uint64_t siphash24(const uint8_t *in, const size_t inlen)
+{
+	uint64_t k0 = U8TO64_LE((const uint8_t*)siphash_key);
+	uint64_t k1 = U8TO64_LE((const uint8_t*)siphash_key+8);
+	uint64_t v0 = 0x736f6d6570736575ULL ^ k0;
+	uint64_t v1 = 0x646f72616e646f6dULL ^ k1;
+	uint64_t v2 = 0x6c7967656e657261ULL ^ k0;
+	uint64_t v3 = 0x7465646279746573ULL ^ k1;
+	const uint8_t *end = in + inlen - (inlen % 8);
+	uint64_t m; /* temp */
+	for (; in != end; in += 8) {
+		m = U8TO64_LE(in);
+		v3 ^= m;
+		for(int i=0;i<2;i++){
+			v0+=v1; v1=ROTL64(v1,13); v1^=v0; v0=ROTL64(v0,32);
+			v2+=v3; v3=ROTL64(v3,16); v3^=v2;
+			v0+=v3; v3=ROTL64(v3,21); v3^=v0;
+			v2+=v1; v1=ROTL64(v1,17); v1^=v2; v2=ROTL64(v2,32);
+		}
+		v0 ^= m;
+	}
+	uint64_t b = ((uint64_t)inlen) << 56;
+	switch (inlen & 7) {
+	case 7: b |= ((uint64_t)in[6]) << 48;
+	case 6: b |= ((uint64_t)in[5]) << 40;
+	case 5: b |= ((uint64_t)in[4]) << 32;
+	case 4: b |= ((uint64_t)in[3]) << 24;
+	case 3: b |= ((uint64_t)in[2]) << 16;
+	case 2: b |= ((uint64_t)in[1]) << 8;
+	case 1: b |= ((uint64_t)in[0]); break;
+	case 0: break;
+	}
+	v3 ^= b;
+	for(int i=0;i<2;i++){ v0+=v1; v1=ROTL64(v1,13); v1^=v0; v0=ROTL64(v0,32);
+	v2+=v3; v3=ROTL64(v3,16); v3^=v2;
+	v0+=v3; v3=ROTL64(v3,21); v3^=v0;
+	v2+=v1; v1=ROTL64(v1,17); v1^=v2; v2=ROTL64(v2,32); }
+	v0 ^= b;
+	v2 ^= 0xff;
+	for(int r=0;r<4;r++){ v0+=v1; v1=ROTL64(v1,13); v1^=v0; v0=ROTL64(v0,32);
+	v2+=v3; v3=ROTL64(v3,16); v3^=v2;
+	v0+=v3; v3=ROTL64(v3,21); v3^=v0;
+	v2+=v1; v1=ROTL64(v1,17); v1^=v2; v2=ROTL64(v2,32);}
+	return v0 ^ v1 ^ v2 ^ v3;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  ** Public API                                                             */
+/* -------------------------------------------------------------------------- */
+secure_uart_status_t
+secure_uart_build (const uint8_t *payload, uint8_t plen,
+		uint8_t *frame, uint8_t *flen)
+{
+	if(plen>SECURE_UART_MAX_PAYLOAD) return -1;
+	uint8_t *p = frame;
+	*p++ = SYNC_HIGH;
+	*p++ = SYNC_LOW;
+	*p++ = plen + CNT_LEN + CRC_LEN + MAC_LEN;  /* LEN field */
+	*p++ = cnt_tx++;                             /* CNT field */
+	/* Optionally encrypt */
+#if SECURE_UART_USE_ENCRYPTION
+	uint8_t enc_buf[SECURE_UART_MAX_PAYLOAD];
+	memcpy(enc_buf, payload, plen);
+	uint16_t rk[26];
+	speck64_key_schedule((const uint16_t*)speck_k96, rk);
+	for(uint8_t i=0;i<plen;i+=4){
+		uint16_t block[2];
+		memcpy(block, enc_buf+i, 4);
+		speck64_encrypt(rk, block);
+		memcpy(enc_buf+i, block, 4);
+	}
+	memcpy(p, enc_buf, plen);
+#else
+	memcpy(p, payload, plen);
+#endif
+	p += plen;
+	/* CRC32 */
+	uint32_t crc = HAL_CRC_Calculate(&hcrc, (uint32_t*)(frame+SYNC_LEN+LEN_LEN), (plen+CNT_LEN+3)/4 +1 );
+	memcpy(p, &crc, CRC_LEN);
+	p += CRC_LEN;
+	/* MAC */
+	uint64_t mac = siphash24(frame+SYNC_LEN+LEN_LEN, plen+CNT_LEN+CRC_LEN);
+	memcpy(p, &mac, MAC_LEN);
+	p += MAC_LEN;
+	*flen = p - frame;
+	return 0;
+}
+
+secure_uart_status_t
+secure_uart_parse (uint8_t *frame, uint16_t size,
+		uint8_t *out,  uint8_t *out_len)
+{
+	if(size < SECURE_UART_OVERHEAD) return SECURE_UART_LEN_ERR;
+	if(frame[0]!=SYNC_HIGH || frame[1]!=SYNC_LOW) return SECURE_UART_SYNC_ERR;
+	uint8_t len = frame[2];
+	if(len + SYNC_LEN + LEN_LEN > size) return SECURE_UART_LEN_ERR;
+	uint8_t *payload = &frame[4];
+	uint8_t plen = len - (CNT_LEN+CRC_LEN+MAC_LEN);
+	uint8_t *crc_ptr = payload + plen;
+	uint8_t *mac_ptr = crc_ptr + CRC_LEN;
+	/* CRC check */
+	uint32_t calc_crc = HAL_CRC_Calculate(&hcrc, (uint32_t*)(frame+SYNC_LEN+LEN_LEN), (plen+CNT_LEN+3)/4 +1);
+	uint32_t recv_crc; memcpy(&recv_crc, crc_ptr, 4);
+	if(calc_crc != recv_crc) return SECURE_UART_CRC_ERR;
+	/* MAC check */
+	uint64_t calc_mac = siphash24(frame+SYNC_LEN+LEN_LEN, plen+CNT_LEN+CRC_LEN);
+	uint64_t recv_mac; memcpy(&recv_mac, mac_ptr, 8);
+	if(calc_mac != recv_mac) return SECURE_UART_MAC_ERR;
+	/* CNT check */
+	uint8_t cnt_in = frame[3];
+	uint8_t diff = cnt_in - cnt_rx_last;
+	if (diff == 0 || diff > SECURE_UART_CNT_WINDOW)
+		return SECURE_UART_REPLAY_ERR;
+
+	cnt_rx_last = cnt_in;
+	/* Decrypt */
+#if SECURE_UART_USE_ENCRYPTION
+	uint16_t rk[26];
+	speck64_key_schedule((const uint16_t*)speck_k96, rk);
+	for(uint8_t i=0;i<plen;i+=4){
+		uint16_t block[2];
+		memcpy(block, payload+i, 4);
+		speck64_decrypt(rk, block);
+		memcpy(out+i, block, 4);
+	}
+#else
+	memcpy(out, payload, plen);
+#endif
+	*out_len = plen;
+	return SECURE_UART_OK;
+}
+
+
+const char *secure_uart_status_str (secure_uart_status_t s)
+{
+	static const char *tbl[] = { "OK","SYNC","LEN","CRC","MAC","REPLAY" };
+	return (s <= SECURE_UART_REPLAY_ERR) ? tbl[s] : "?";
+}
+

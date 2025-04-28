@@ -1,0 +1,40 @@
+/*
+ * uart_callbacks.c
+ *
+ *  Created on: Apr 23, 2025
+ *      Author: rcsi
+ */
+
+
+#include "main.h"
+#include "usart.h"
+#include <stdio.h>
+
+static void print_block(const char *tag,
+                        const uint8_t *buf,
+                        uint16_t len)
+{
+    printf("%s (%u): ", tag, len);
+    for (uint16_t i = 0; i < len; ++i) putchar(buf[i]);
+    putchar('\n');
+}
+
+/* колбэк HAL вызывается после события IDLE-line */
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+    if (huart == &huart1)
+    {
+        print_block("USART1 RX", rx1_dma, Size);
+
+        /* перезапуск приёма */
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart1, rx1_dma, RX1_BUF_LEN);
+        __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
+    }
+    else if (huart == &huart6)
+    {
+        print_block("USART6 RX", rx6_dma, Size);
+
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart6, rx6_dma, RX6_BUF_LEN);
+        __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
+    }
+}

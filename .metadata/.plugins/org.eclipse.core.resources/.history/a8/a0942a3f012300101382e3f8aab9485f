@@ -1,0 +1,328 @@
+/**
+  ******************************************************************************
+  * @file    ascon.c
+  * @brief   Реализация шифра Ascon и функций MAC
+  ******************************************************************************
+  */
+
+#include "ascon.h"
+
+// Константы для перестановки
+#define ASCON_ROUNDS_A 12
+#define ASCON_ROUNDS_B 6
+
+// Константы раундов
+static const uint64_t round_constants[12] = {
+    0x00000000000000f0ULL, 0x00000000000000e1ULL, 0x00000000000000d2ULL, 0x00000000000000c3ULL,
+    0x00000000000000b4ULL, 0x00000000000000a5ULL, 0x0000000000000096ULL, 0x0000000000000087ULL,
+    0x0000000000000078ULL, 0x0000000000000069ULL, 0x000000000000005aULL, 0x000000000000004bULL
+};
+
+// Функции преобразования между форматами хранения байт и 64-битными значениями
+uint64_t ascon_from_bytes(const uint8_t* bytes) {
+    uint64_t x = 0;
+    for (int i = 0; i < 8; i++) {
+        x |= ((uint64_t)bytes[i]) << (56 - i * 8);
+    }
+    return x;
+}
+
+void ascon_to_bytes(uint8_t* bytes, uint64_t value) {
+    for (int i = 0; i < 8; i++) {
+        bytes[i] = (value >> (56 - i * 8)) & 0xFF;
+    }
+}
+
+// Функции для операций над битами
+static inline uint64_t ascon_rotate(uint64_t x, int n) {
+    return (x >> n) | (x << (64 - n));
+}
+
+// S-блоки и перестановки для Ascon
+static void ascon_substitution_layer(ascon_state_t* state) {
+    uint64_t x0 = state->x0;
+    uint64_t x1 = state->x1;
+    uint64_t x2 = state->x2;
+    uint64_t x3 = state->x3;
+    uint64_t x4 = state->x4;
+    uint64_t t0, t1, t2, t3, t4;
+
+    x0 ^= x4;
+    x2 ^= x1;
+    x4 ^= x3;
+
+    t0 = ~x0 & x1;
+    t1 = ~x1 & x2;
+    t2 = ~x2 & x3;
+    t3 = ~x3 & x4;
+    t4 = ~x4 & x0;
+
+    x0 ^= t1;
+    x1 ^= t2;
+    x2 ^= t3;
+    x3 ^= t4;
+    x4 ^= t0;
+
+    x1 ^= x0;
+    x3 ^= x2;
+    x0 ^= x4;
+    x2 = ~x2;
+
+    state->x0 = x0;
+    state->x1 = x1;
+    state->x2 = x2;
+    state->x3 = x3;
+    state->x4 = x4;
+}
+
+static void ascon_linear_layer(ascon_state_t* state) {
+    state->x0 ^= ascon_rotate(state->x0, 19) ^ ascon_rotate(state->x0, 28);
+    state->x1 ^= ascon_rotate(state->x1, 61) ^ ascon_rotate(state->x1, 39);
+    state->x2 ^= ascon_rotate(state->x2, 1) ^ ascon_rotate(state->x2, 6);
+    state->x3 ^= ascon_rotate(state->x3, 10) ^ ascon_rotate(state->x3, 17);
+    state->x4 ^= ascon_rotate(state->x4, 7) ^ ascon_rotate(state->x4, 41);
+}
+
+void ascon_permutation(ascon_state_t* state, int rounds) {
+    int start_round = ASCON_ROUNDS_A - rounds;
+
+    for (int r = start_round; r < ASCON_ROUNDS_A; r++) {
+        // Добавление константы раунда
+        state->x2 ^= round_constants[r];
+
+        // S-блоки
+        ascon_substitution_layer(state);
+
+        // Линейные преобразования
+        ascon_linear_layer(state);
+    }
+}
+
+// Инициализация состояния для Ascon-128
+void ascon_init(ascon_state_t* state, const uint8_t* key, const uint8_t* nonce) {
+    // Инициализация состояния с IV для Ascon-128
+    state->x0 = 0x80400c0600000000ULL;  // IV для Ascon-128
+
+    // Загрузка ключа
+    state->x1 = ascon_from_bytes(key);
+    state->x2 = ascon_from_bytes(key + 8);
+
+    // Загрузка nonce
+    state->x3 = ascon_from_bytes(nonce);
+    state->x4 = ascon_from_bytes(nonce + 8);
+
+    // Первичная перестановка
+    ascon_permutation(state, ASCON_ROUNDS_A);
+
+    // XOR ключа в состояние
+    state->x3 ^= ascon_from_bytes(key);
+    state->x4 ^= ascon_from_bytes(key + 8);
+}
+
+// Функция поглощения данных
+void ascon_absorb(ascon_state_t* state, const uint8_t* data, uint32_t length) {
+    uint8_t block[8];
+    size_t processed = 0;
+
+    while (processed < length) {
+        size_t block_size = (length - processed < 8) ? length - processed : 8;
+
+        // Если блок неполный, заполняем его нулями
+        memset(block, 0, 8);
+        memcpy(block, data + processed, block_size);
+
+        // XOR блока данных с состоянием
+        state->x0 ^= ascon_from_bytes(block);
+
+        // Выполнение перестановки между блоками
+        ascon_permutation(state, ASCON_ROUNDS_B);
+
+        processed += block_size;
+    }
+}
+
+// Функция выжимания данных
+void ascon_squeeze(ascon_state_t* state, uint8_t* data, uint32_t length) {
+    uint8_t block[8];
+    size_t processed = 0;
+
+    while (processed < length) {
+        size_t block_size = (length - processed < 8) ? length - processed : 8;
+
+        // Выжимаем данные из состояния
+        ascon_to_bytes(block, state->x0);
+        memcpy(data + processed, block, block_size);
+
+        // Выполняем перестановку между блоками выжимания
+        if (processed + block_size < length) {
+            ascon_permutation(state, ASCON_ROUNDS_B);
+        }
+
+        processed += block_size;
+    }
+}
+
+// Функция шифрования
+void ascon_encrypt(ascon_state_t* state, uint8_t* ciphertext, const uint8_t* plaintext, uint32_t length) {
+    uint8_t block[8];
+    size_t processed = 0;
+
+    while (processed < length) {
+        size_t block_size = (length - processed < 8) ? length - processed : 8;
+
+        // Если блок неполный, заполняем его нулями
+        memset(block, 0, 8);
+        memcpy(block, plaintext + processed, block_size);
+
+        // XOR блока открытого текста с состоянием
+        uint64_t data_block = ascon_from_bytes(block);
+        state->x0 ^= data_block;
+
+        // Извлекаем шифротекст
+        ascon_to_bytes(block, state->x0);
+        memcpy(ciphertext + processed, block, block_size);
+
+        // Выполнение перестановки между блоками (кроме последнего)
+        if (processed + block_size < length) {
+            ascon_permutation(state, ASCON_ROUNDS_B);
+        }
+
+        processed += block_size;
+    }
+}
+
+// Функция дешифрования
+int ascon_decrypt(ascon_state_t* state, uint8_t* plaintext, const uint8_t* ciphertext, uint32_t length) {
+    uint8_t block[8];
+    size_t processed = 0;
+
+    while (processed < length) {
+        size_t block_size = (length - processed < 8) ? length - processed : 8;
+
+        // Если блок неполный, заполняем его нулями
+        memset(block, 0, 8);
+        memcpy(block, ciphertext + processed, block_size);
+
+        // Получаем блок шифротекста
+        uint64_t cipher_block = ascon_from_bytes(block);
+
+        // Извлекаем открытый текст
+        ascon_to_bytes(block, state->x0 ^ cipher_block);
+        memcpy(plaintext + processed, block, block_size);
+
+        // Обновляем состояние
+        state->x0 = cipher_block;
+
+        // Выполнение перестановки между блоками (кроме последнего)
+        if (processed + block_size < length) {
+            ascon_permutation(state, ASCON_ROUNDS_B);
+        }
+
+        processed += block_size;
+    }
+
+    return 0;
+}
+
+// Завершение шифрования и генерация тега
+void ascon_finalize(ascon_state_t* state, const uint8_t* key, uint8_t* tag) {
+    // XOR ключа с состоянием
+    state->x1 ^= ascon_from_bytes(key);
+    state->x2 ^= ascon_from_bytes(key + 8);
+
+    // Заключительная перестановка
+    ascon_permutation(state, ASCON_ROUNDS_A);
+
+    // Извлечение тега
+    state->x3 ^= ascon_from_bytes(key);
+    state->x4 ^= ascon_from_bytes(key + 8);
+
+    ascon_to_bytes(tag, state->x3);
+    ascon_to_bytes(tag + 8, state->x4);
+}
+
+// MAC на основе Ascon
+void ascon_mac(const uint8_t* key, const uint8_t* data, uint32_t length, uint8_t* tag) {
+    ascon_state_t state;
+    uint8_t nonce[ASCON_NONCE_SIZE] = {0}; // Для MAC используем нулевой nonce
+
+    // Инициализация
+    ascon_init(&state, key, nonce);
+
+    // Поглощение данных
+    ascon_absorb(&state, data, length);
+
+    // Генерация тега
+    ascon_finalize(&state, key, tag);
+}
+
+// Проверка MAC
+int ascon_mac_verify(const uint8_t* key, const uint8_t* data, uint32_t length, const uint8_t* tag) {
+    uint8_t calculated_tag[ASCON_TAG_SIZE];
+
+    // Вычисляем MAC
+    ascon_mac(key, data, length, calculated_tag);
+
+    // Сравниваем вычисленный MAC с полученным
+    return memcmp(calculated_tag, tag, ASCON_TAG_SIZE) == 0 ? 1 : 0;
+}
+
+// Полная функция шифрования Ascon-128
+void ascon128_encrypt(const uint8_t* key, const uint8_t* nonce,
+                      const uint8_t* associated_data, uint32_t ad_len,
+                      const uint8_t* plaintext, uint32_t pt_len,
+                      uint8_t* ciphertext, uint8_t* tag) {
+    ascon_state_t state;
+
+    // Инициализация
+    ascon_init(&state, key, nonce);
+
+    // Обработка ассоциированных данных
+    if (ad_len > 0) {
+        ascon_absorb(&state, associated_data, ad_len);
+    }
+
+    // Разделитель между ассоциированными данными и текстом
+    state.x0 ^= 0x01;
+
+    // Шифрование
+    ascon_encrypt(&state, ciphertext, plaintext, pt_len);
+
+    // Генерация тега
+    ascon_finalize(&state, key, tag);
+}
+
+// Полная функция дешифрования Ascon-128
+int ascon128_decrypt(const uint8_t* key, const uint8_t* nonce,
+                     const uint8_t* associated_data, uint32_t ad_len,
+                     const uint8_t* ciphertext, uint32_t ct_len,
+                     const uint8_t* tag, uint8_t* plaintext) {
+    ascon_state_t state;
+    uint8_t calculated_tag[ASCON_TAG_SIZE];
+
+    // Инициализация
+    ascon_init(&state, key, nonce);
+
+    // Обработка ассоциированных данных
+    if (ad_len > 0) {
+        ascon_absorb(&state, associated_data, ad_len);
+    }
+
+    // Разделитель между ассоциированными данными и текстом
+    state.x0 ^= 0x01;
+
+    // Дешифрование
+    ascon_decrypt(&state, plaintext, ciphertext, ct_len);
+
+    // Генерация тега для проверки
+    ascon_finalize(&state, key, calculated_tag);
+
+    // Проверка тега
+    if (memcmp(calculated_tag, tag, ASCON_TAG_SIZE) != 0) {
+        // Ошибка проверки MAC, очищаем plaintext
+        memset(plaintext, 0, ct_len);
+        return 0;
+    }
+
+    return 1;
+}

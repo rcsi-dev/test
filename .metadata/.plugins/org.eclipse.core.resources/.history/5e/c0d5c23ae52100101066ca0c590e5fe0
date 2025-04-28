@@ -1,0 +1,19 @@
+/*
+ * cipher_config.h
+ *
+ * Configuration file for cipher selection in secure UART protocol
+ *
+ * Created on: May 1, 2025
+ */
+
+#ifndef CIPHER_CONFIG_H
+#define CIPHER_CONFIG_H
+
+/* Cipher selection options */
+#define CIPHER_SPECK    0
+#define CIPHER_AES      1
+
+/* Select which cipher to use (change this to switch between implementations) */
+#define SECURE_UART_CIPHER   CIPHER_SPECK
+
+#endif /* CIPHER_CONFIG_H */

@@ -1,0 +1,10 @@
+03:00:25 **** Incremental Build of configuration Debug for project attacks ****
+make -j8 all 
+arm-none-eabi-size  attacks.elf 
+   text	   data	    bss	    dec	    hex	filename
+  24384	    132	   3612	  28128	   6de0	attacks.elf
+Finished building: default.size.stdout
+ 
+
+03:00:26 Build Finished. 0 errors, 0 warnings. (took 288ms)
+

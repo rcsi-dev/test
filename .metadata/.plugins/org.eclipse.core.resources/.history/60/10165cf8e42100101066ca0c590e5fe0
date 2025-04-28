@@ -1,0 +1,47 @@
+/*
+ * secure_uart.h
+ *
+ *	Публичное API для протокола
+ *
+ *  Created on: Apr 24, 2025
+ *      Author: rcsi
+ */
+
+#ifndef SECURE_UART_H
+#define SECURE_UART_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+/* Опции при сборке */
+#define SECURE_UART_USE_ENCRYPTION   1
+
+/* Размерности полей */
+#define SECURE_UART_CNT_WINDOW  8U          /* окно допустимых CNT-значений */
+#define SECURE_UART_OVERHEAD   16U                     /* SYNC LEN CNT CRC MAC */
+#define SECURE_UART_MAX_FRAME  256U
+#define SECURE_UART_MAX_PAYLOAD (SECURE_UART_MAX_FRAME - SECURE_UART_OVERHEAD)
+
+/* Статус-коды */
+typedef enum {
+    SECURE_UART_OK = 0,
+    SECURE_UART_SYNC_ERR,
+    SECURE_UART_LEN_ERR,
+    SECURE_UART_CRC_ERR,
+    SECURE_UART_MAC_ERR,
+    SECURE_UART_REPLAY_ERR
+} secure_uart_status_t;
+
+const char *secure_uart_status_str (secure_uart_status_t s);
+
+/* API */
+secure_uart_status_t
+secure_uart_build (const uint8_t *in,  uint8_t  in_len,
+                         uint8_t *out, uint8_t *out_len);
+
+secure_uart_status_t
+secure_uart_parse (uint8_t *frame, uint16_t size,   /* ← uint16_t! */
+                   uint8_t *out,  uint8_t *out_len);
+
+#endif /* SECURE_UART_H */
+

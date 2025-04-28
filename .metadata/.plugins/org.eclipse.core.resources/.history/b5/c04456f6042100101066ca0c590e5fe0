@@ -1,0 +1,55 @@
+/*
+ * uart_callbacks.c
+ *
+ *  Created on: Apr 23, 2025
+ *      Author: rcsi
+ */
+
+
+#include "main.h"
+#include "usart.h"
+#include "secure_uart.h"
+#include <stdio.h>
+
+static void dump_hex(const char *tag,
+                     const uint8_t *buf, uint16_t len)
+{
+    printf("%s (%u B): ", tag, len);
+    for (uint16_t i = 0; i < len; ++i)
+        printf("%02X ", buf[i]);
+    printf("\r\n");
+}
+
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+    static uint8_t plain[SECURE_UART_MAX_PAYLOAD];
+    uint8_t plen;
+    secure_uart_status_t st;
+
+    uint8_t *rxbuf = (huart == &huart1) ? rx1_dma : rx6_dma;
+
+    /* полный дамп зашифрованного кадра  */
+    dump_hex("RAW", rxbuf, Size);
+
+    st = secure_uart_parse(rxbuf, Size, plain, &plen);
+    printf("%s: %s, %u B\r\n",
+           (huart==&huart1) ? "USART1" : "USART6",
+           secure_uart_status_str(st), plen);
+
+    if (st == SECURE_UART_OK)
+    {
+        /* расшифрованный payload в текстовом виде */
+        printf("Payload: %.*s\r\n", plen, plain);
+
+        /* такой же payload «в hex» */
+        dump_hex("PLAIN", plain, plen);
+    }
+
+    /* перезапуск DMA */
+    HAL_UARTEx_ReceiveToIdle_DMA(huart, rxbuf,
+                                 (huart==&huart1)?RX1_LEN:RX6_LEN);
+    __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
+}
+
+

@@ -1,0 +1,286 @@
+/* ===============================================================
+ * secure_uart.c  –  Lightweight secured‑UART helper
+ * ===============================================================
+ * Implements a tiny framing layer with optional encryption (SPECK‑64/96
+ * CTR), hardware CRC‑32 and SipHash‑128/2‑4 MAC (truncated to 64 bit).
+ * Designed for STM32F4‑series (CRC peripheral present).
+ *
+ *  Public API in secure_uart.h
+ * ===============================================================*/
+
+#include "main.h"
+#include "secure_uart.h"
+#include "stm32f4xx_hal.h"
+#include <string.h>
+
+/* ------------------------------------------------------------------
+ * Build‑time options
+ * ------------------------------------------------------------------*/
+#ifndef SECURE_UART_USE_ENCRYPTION
+#define SECURE_UART_USE_ENCRYPTION  1
+#endif
+#define SECURE_UART_CNT_WINDOW      8U     /* replay protection */
+
+/* ------------------------------------------------------------------
+ * Constants
+ * ------------------------------------------------------------------*/
+#define SYNC_HIGH  0x55U
+#define SYNC_LOW   0xAAU
+#define SYNC_LEN   2U
+#define LEN_LEN    1U
+#define CNT_LEN    1U
+#define CRC_LEN    4U
+#define MAC_LEN    8U
+
+/* ------------------------------------------------------------------
+ * Example secret keys  (replace in production)
+ * ------------------------------------------------------------------*/
+static const uint32_t siphash_key[4] = {
+		0x01234567, 0x89ABCDEF, 0x0BADF00D, 0xDEADBEEF };
+#if SECURE_UART_USE_ENCRYPTION
+static const uint32_t speck_k96[3] = {
+		0xA56BABCD, 0x00010203, 0xF0E1D2C3 };
+#endif
+
+/* declaration */
+static uint32_t crc32_bytes(const uint8_t *buf, uint16_t len);
+static void speck64_ctr_crypt(uint32_t rk[26],
+		uint8_t *buf, uint8_t len,
+		uint32_t iv_low);
+
+/* rolling counters */
+static uint8_t cnt_tx      = 0;
+static uint8_t cnt_rx_last = 0;
+
+extern CRC_HandleTypeDef hcrc;   /* provided by CubeMX */
+
+/* ==================================================================
+ * SPECK‑64/96 – 26‑round block cipher (block 64 bit, key 96 bit)
+ * ==================================================================*/
+#if SECURE_UART_USE_ENCRYPTION
+#define ROR32(x,r)  ( ((x) >> (r)) | ((x) << (32U-(r))) )
+#define ROL32(x,r)  ( ((x) << (r)) | ((x) >> (32U-(r))) )
+
+static void speck64_key_schedule(const uint32_t k[3], uint32_t rk[26])
+{
+	uint32_t x = k[2];
+	uint32_t y = k[1];
+	rk[0] = k[0];
+	for(uint8_t i = 0; i < 25; ++i){           /* produce rk[1]..rk[25] */
+		x = (ROR32(x,8) + y) ^ i;
+		y =  ROR32(y,3) ^ x;
+		rk[i+1] = x;
+	}
+}
+
+static void speck64_encrypt(const uint32_t rk[26], uint32_t b[2])
+{
+	uint32_t x = b[1], y = b[0];
+	for(uint8_t i = 0; i < 26; ++i){
+		x = (ROR32(x,8) + y) ^ rk[i];
+		y =  ROR32(y,3) ^ x;
+	}
+	b[1] = x;  b[0] = y;
+}
+
+#endif /* ENC */
+
+/* ==================================================================
+ * SipHash-128/2‑4 → 64-bit tag  (public domain reference impl.)
+ * ==================================================================*/
+#define U8TO64_LE(p) ( ((uint64_t)(p)[0])       | ((uint64_t)(p)[1]<<8)  | \
+		((uint64_t)(p)[2]<<16) | ((uint64_t)(p)[3]<<24) | \
+		((uint64_t)(p)[4]<<32) | ((uint64_t)(p)[5]<<40) | \
+		((uint64_t)(p)[6]<<48) | ((uint64_t)(p)[7]<<56) )
+#define ROTL64(x,b)  ( ((x) << (b)) | ((x) >> (64-(b))) )
+
+static uint64_t siphash24(const uint8_t *in, size_t inlen)
+{
+	uint64_t k0 = ((const uint64_t*)siphash_key)[0];
+	uint64_t k1 = ((const uint64_t*)siphash_key)[1];
+	uint64_t v0 = 0x736f6d6570736575ULL ^ k0;
+	uint64_t v1 = 0x646f72616e646f6dULL ^ k1;
+	uint64_t v2 = 0x6c7967656e657261ULL ^ k0;
+	uint64_t v3 = 0x7465646279746573ULL ^ k1;
+
+	const uint8_t *end = in + inlen - (inlen & 7);
+	while(in != end){
+		uint64_t m = U8TO64_LE(in); in += 8;
+		v3 ^= m;
+		for(uint8_t r=0;r<2;r++){
+			v0+=v1; v1=ROTL64(v1,13); v1^=v0; v0=ROTL64(v0,32);
+			v2+=v3; v3=ROTL64(v3,16); v3^=v2;
+			v0+=v3; v3=ROTL64(v3,21); v3^=v0;
+			v2+=v1; v1=ROTL64(v1,17); v1^=v2; v2=ROTL64(v2,32);
+		}
+		v0 ^= m;
+	}
+	uint64_t b = ((uint64_t)inlen) << 56;
+	switch(inlen & 7){
+	case 7: b |= ((uint64_t)in[6]) << 48;
+	case 6: b |= ((uint64_t)in[5]) << 40;
+	case 5: b |= ((uint64_t)in[4]) << 32;
+	case 4: b |= ((uint64_t)in[3]) << 24;
+	case 3: b |= ((uint64_t)in[2]) << 16;
+	case 2: b |= ((uint64_t)in[1]) <<  8;
+	case 1: b |= ((uint64_t)in[0]);        break;
+	default: break;
+	}
+	v3 ^= b;
+	for(uint8_t r=0;r<2;r++){
+		v0+=v1; v1=ROTL64(v1,13); v1^=v0; v0=ROTL64(v0,32);
+		v2+=v3; v3=ROTL64(v3,16); v3^=v2;
+		v0+=v3; v3=ROTL64(v3,21); v3^=v0;
+		v2+=v1; v1=ROTL64(v1,17); v1^=v2; v2=ROTL64(v2,32);
+	}
+	v0 ^= b;
+	v2 ^= 0xff;
+	for(uint8_t r=0;r<4;r++){
+		v0+=v1; v1=ROTL64(v1,13); v1^=v0; v0=ROTL64(v0,32);
+		v2+=v3; v3=ROTL64(v3,16); v3^=v2;
+		v0+=v3; v3=ROTL64(v3,21); v3^=v0;
+		v2+=v1; v1=ROTL64(v1,17); v1^=v2; v2=ROTL64(v2,32);
+	}
+	return v0 ^ v1 ^ v2 ^ v3;
+}
+
+/* ==================================================================
+ *  secure_uart_build  –  TX side
+ * ==================================================================*/
+secure_uart_status_t
+secure_uart_build(const uint8_t *payload, uint8_t plen,
+		uint8_t *frame,  uint8_t *framelen)
+{
+	if(plen > SECURE_UART_MAX_PAYLOAD) return SECURE_UART_LEN_ERR;
+
+	uint8_t *p = frame;
+	*p++ = SYNC_HIGH;                 /* SYNC */
+	*p++ = SYNC_LOW;
+	*p++ = plen + CNT_LEN + CRC_LEN + MAC_LEN;   /* LEN */
+	*p++ = cnt_tx++;                                 /* CNT */
+
+#if SECURE_UART_USE_ENCRYPTION
+	uint32_t rk[26];
+	speck64_key_schedule(speck_k96, rk);
+
+	uint8_t enc[SECURE_UART_MAX_PAYLOAD];
+	memcpy(enc, payload, plen);
+	speck64_ctr_crypt(rk, enc, plen, frame[3]);   /* iv = CNT */
+
+	/* enc уже зашифрован – копируем в кадр */
+	memcpy(p, enc, plen);
+#else
+	memcpy(p, payload, plen);
+#endif
+	p += plen;
+
+	/* CRC32 over LEN..CRC‑1 (i.e., CNT+PAYLOAD) */
+	uint32_t crc = crc32_padded(frame + SYNC_LEN + LEN_LEN,
+	                            plen + CNT_LEN);
+	memcpy(p, &crc, CRC_LEN);
+
+	/* MAC over LEN..CRC */
+	uint64_t mac = siphash24(frame+SYNC_LEN+LEN_LEN,
+			plen + CNT_LEN + CRC_LEN);
+	memcpy(p, &mac, MAC_LEN); p += MAC_LEN;
+
+	*framelen = (uint8_t)(p - frame);
+	return SECURE_UART_OK;
+}
+
+/* ==================================================================
+ *  secure_uart_parse  –  RX side
+ * ==================================================================*/
+secure_uart_status_t
+secure_uart_parse(uint8_t *frame, uint16_t size,
+		uint8_t *out,   uint8_t *out_len)
+{
+	if(size < (SYNC_LEN+LEN_LEN+CNT_LEN+CRC_LEN+MAC_LEN))
+		return SECURE_UART_LEN_ERR;
+	if(frame[0]!=SYNC_HIGH || frame[1]!=SYNC_LOW)
+		return SECURE_UART_SYNC_ERR;
+
+	uint8_t len = frame[2];
+	if(len + SYNC_LEN + LEN_LEN > size)
+		return SECURE_UART_LEN_ERR;
+
+	uint8_t *payload = &frame[4];
+	uint8_t plen     = len - (CNT_LEN+CRC_LEN+MAC_LEN);
+	uint8_t *crc_ptr = payload + plen;
+	uint8_t *mac_ptr = crc_ptr + CRC_LEN;
+
+	/* CRC */
+	uint32_t calc_crc = crc32_padded(frame + SYNC_LEN + LEN_LEN,
+	                                 plen + CNT_LEN);
+	uint32_t recv_crc; memcpy(&recv_crc, crc_ptr, 4);
+	if(calc_crc != recv_crc) return SECURE_UART_CRC_ERR;
+
+	/* MAC */
+	uint64_t calc_mac = siphash24(frame+SYNC_LEN+LEN_LEN,
+			plen + CNT_LEN + CRC_LEN);
+	uint64_t recv_mac; memcpy(&recv_mac, mac_ptr, 8);
+	if(calc_mac != recv_mac) return SECURE_UART_MAC_ERR;
+
+	/* CNT / replay */
+	uint8_t cnt_in = frame[3];
+	uint8_t diff   = cnt_in - cnt_rx_last;
+	if(diff == 0 || diff > SECURE_UART_CNT_WINDOW)
+		return SECURE_UART_REPLAY_ERR;
+	cnt_rx_last = cnt_in;
+
+#if SECURE_UART_USE_ENCRYPTION
+	uint32_t rk[26];
+	speck64_key_schedule(speck_k96, rk);
+	speck64_ctr_crypt(rk, payload, plen, frame[3]);   /* iv = CNT */
+
+	memcpy(out, payload, plen);
+
+#else
+	memcpy(out, payload, plen);
+#endif
+
+	*out_len = plen;
+	return SECURE_UART_OK;
+}
+
+/* SPECK-CTR helper */
+static void speck64_ctr_crypt(uint32_t rk[26],
+		uint8_t *buf, uint8_t len,
+		uint32_t iv_low)
+{
+	uint64_t ctr = iv_low;            /* 64-битный счётчик */
+	for (uint8_t off=0; off < len; off += 8, ++ctr) {
+		uint32_t blk[2] = { (uint32_t)ctr, (uint32_t)(ctr>>32) };
+		speck64_encrypt(rk, blk);     /* keystream = E_K(ctr) */
+		for (uint8_t i=0; i<8 && (off+i)<len; ++i)
+			buf[off+i] ^= ((uint8_t*)blk)[i];
+	}
+}
+
+/* helper for logs */
+const char *secure_uart_status_str(secure_uart_status_t s)
+{
+	static const char *tbl[] = {"OK","SYNC","LEN","CRC","MAC","REPLAY"};
+	return (s<=SECURE_UART_REPLAY_ERR)? tbl[s] : "?";
+}
+
+
+/* byte-wise CRC32 via HW block (handles any length) */
+/* 32-битный CRC32: дописываем 0-байты до кратности 4               */
+static uint32_t crc32_padded(const uint8_t *buf, uint16_t len)
+{
+    uint8_t tmp[4];
+    uint16_t words = len >> 2;                /* целые DWORD'ы   */
+    uint32_t crc   = HAL_CRC_Calculate(&hcrc,
+                                       (uint32_t*)buf,
+                                       words);
+
+    uint8_t rem = len & 3;                    /* хвост 1-3 байта */
+    if (rem) {
+        memcpy(tmp, buf + (words << 2), rem); /* копируем хвост  */
+        memset(tmp + rem, 0, 4 - rem);        /* допаддим нулями */
+        crc = HAL_CRC_Accumulate(&hcrc, (uint32_t*)tmp, 1);
+    }
+    return crc;
+}
+

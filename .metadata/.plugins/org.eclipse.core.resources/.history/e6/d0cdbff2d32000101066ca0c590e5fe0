@@ -1,0 +1,39 @@
+/*
+ * uart_callbacks.c
+ *
+ *  Created on: Apr 23, 2025
+ *      Author: rcsi
+ */
+
+
+#include "main.h"
+#include "usart.h"
+#include "secure_uart.h"
+#include <stdio.h>
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+    uint8_t plain[SECURE_UART_MAX_PAYLOAD];
+    uint8_t plen;
+    secure_uart_status_t st;
+
+    if (huart == &huart1)                                  /* приём с USART1 */
+    {
+        st = secure_uart_parse(rx1_dma, Size, plain, &plen);
+        printf("USART1: %s, %u B\n", secure_uart_status_str(st), plen);
+        if (st == SECURE_UART_OK)
+            printf("Payload: %.*s\n", plen, plain);
+
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart1, rx1_dma, RX1_LEN);
+        __HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
+    }
+    else if (huart == &huart6)                             /* то же для USART6 */
+    {
+        st = secure_uart_parse(rx6_dma, Size, plain, &plen);
+        printf("USART6: %s, %u B\n", secure_uart_status_str(st), plen);
+
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart6, rx6_dma, RX6_LEN);
+        __HAL_DMA_DISABLE_IT(huart6.hdmarx, DMA_IT_HT);
+    }
+}
+

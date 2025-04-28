@@ -1,0 +1,17 @@
+/*
+ * retarget.c
+ *
+ *  Created on: Apr 23, 2025
+ *      Author: rcsi
+ */
+
+
+#include "stm32f4xx_hal.h"
+#include "usart.h"
+
+/* Перенаправление printf → USART2 */
+int _write(int file, char *ptr, int len)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+    return len;
+}

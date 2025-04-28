@@ -1,0 +1,219 @@
+/**
+ * @file speck.c
+ * @brief Реализация алгоритма шифрования Speck
+ */
+
+#include "speck.h"
+#include <string.h>
+
+/* Макросы для операций ARX */
+#define ROTL32(x, r) (((x) << (r)) | ((x) >> (32 - (r))))
+#define ROTR32(x, r) (((x) >> (r)) | ((x) << (32 - (r))))
+
+/* Константы для Speck */
+#define SPECK_ALPHA 8  // Параметр ротации
+#define SPECK_BETA  3  // Параметр ротации
+
+/**
+ * @brief Преобразовать массив байтов в 32-битное слово (little-endian)
+ */
+static uint32_t bytes_to_word(const uint8_t* bytes) {
+    return ((uint32_t)bytes[0]) |
+           ((uint32_t)bytes[1] << 8) |
+           ((uint32_t)bytes[2] << 16) |
+           ((uint32_t)bytes[3] << 24);
+}
+
+/**
+ * @brief Преобразовать 32-битное слово в массив байтов (little-endian)
+ */
+static void word_to_bytes(uint32_t word, uint8_t* bytes) {
+    bytes[0] = (uint8_t)(word);
+    bytes[1] = (uint8_t)(word >> 8);
+    bytes[2] = (uint8_t)(word >> 16);
+    bytes[3] = (uint8_t)(word >> 24);
+}
+
+void Speck_Init(SpeckContext* ctx, const uint8_t* key) {
+    uint32_t k[4]; // Ключевые слова
+    uint32_t l[3]; // Вспомогательные ключевые слова
+
+    // Преобразуем ключ (16 байт) в слова
+    k[0] = bytes_to_word(key);
+    l[0] = bytes_to_word(key + 4);
+    l[1] = bytes_to_word(key + 8);
+    l[2] = bytes_to_word(key + 12);
+
+    // Генерация ключей раундов
+    ctx->round_keys[0] = k[0];
+
+    for (int i = 0; i < SPECK_ROUNDS - 1; i++) {
+        l[i % 3] = (ROTR32(l[i % 3], SPECK_ALPHA) + k[(i + 1) % 4]) ^ i;
+        k[(i + 1) % 4] = ROTL32(k[(i + 1) % 4], SPECK_BETA) ^ l[i % 3];
+        ctx->round_keys[i + 1] = k[(i + 1) % 4];
+    }
+}
+
+void Speck_Encrypt(const SpeckContext* ctx, const uint8_t* plaintext, uint8_t* ciphertext) {
+    uint32_t x, y;
+
+    // Преобразуем блок в два 32-битных слова
+    x = bytes_to_word(plaintext);
+    y = bytes_to_word(plaintext + 4);
+
+    // Раунды шифрования
+    for (int i = 0; i < SPECK_ROUNDS; i++) {
+        x = (ROTR32(x, SPECK_ALPHA) + y) ^ ctx->round_keys[i];
+        y = ROTL32(y, SPECK_BETA) ^ x;
+    }
+
+    // Преобразуем обратно в байты
+    word_to_bytes(x, ciphertext);
+    word_to_bytes(y, ciphertext + 4);
+}
+
+void Speck_Decrypt(const SpeckContext* ctx, const uint8_t* ciphertext, uint8_t* plaintext) {
+    uint32_t x, y;
+
+    // Преобразуем блок в два 32-битных слова
+    x = bytes_to_word(ciphertext);
+    y = bytes_to_word(ciphertext + 4);
+
+    // Раунды расшифрования (в обратном порядке)
+    for (int i = SPECK_ROUNDS - 1; i >= 0; i--) {
+        y = ROTR32(y ^ x, SPECK_BETA);
+        x = ROTL32((x ^ ctx->round_keys[i]) - y, SPECK_ALPHA);
+    }
+
+    // Преобразуем обратно в байты
+    word_to_bytes(x, plaintext);
+    word_to_bytes(y, plaintext + 4);
+}
+
+/**
+ * @brief Добавление дополнения PKCS#7 для блочного шифрования
+ */
+static void add_pkcs7_padding(uint8_t* data, size_t data_len, size_t block_size) {
+    uint8_t padding_value = block_size - (data_len % block_size);
+    for (size_t i = 0; i < padding_value; i++) {
+        data[data_len + i] = padding_value;
+    }
+}
+
+/**
+ * @brief Удаление дополнения PKCS#7 после расшифрования
+ */
+static size_t remove_pkcs7_padding(uint8_t* data, size_t data_len) {
+    if (data_len == 0) return 0;
+
+    uint8_t padding_value = data[data_len - 1];
+
+    // Проверка корректности дополнения
+    if (padding_value > SPECK_BLOCK_SIZE || padding_value == 0) {
+        return data_len; // Некорректное дополнение, возвращаем исходную длину
+    }
+
+    for (size_t i = data_len - padding_value; i < data_len - 1; i++) {
+        if (data[i] != padding_value) {
+            return data_len; // Некорректное дополнение, возвращаем исходную длину
+        }
+    }
+
+    return data_len - padding_value;
+}
+
+size_t Speck_GetPaddedLength(size_t length) {
+    return length + (SPECK_BLOCK_SIZE - (length % SPECK_BLOCK_SIZE)) % SPECK_BLOCK_SIZE;
+}
+
+size_t Speck_CBC_Encrypt(const SpeckContext* ctx, const uint8_t* plaintext, size_t length,
+                        const uint8_t* iv, uint8_t* ciphertext) {
+    uint8_t block[SPECK_BLOCK_SIZE];
+    uint8_t chain[SPECK_BLOCK_SIZE];
+    size_t padded_length = Speck_GetPaddedLength(length);
+
+    // Копируем IV в цепочку
+    memcpy(chain, iv, SPECK_BLOCK_SIZE);
+
+    // Шифруем полные блоки
+    size_t num_blocks = length / SPECK_BLOCK_SIZE;
+    for (size_t i = 0; i < num_blocks; i++) {
+        // XOR с предыдущим зашифрованным блоком (или IV для первого блока)
+        for (size_t j = 0; j < SPECK_BLOCK_SIZE; j++) {
+            block[j] = plaintext[i * SPECK_BLOCK_SIZE + j] ^ chain[j];
+        }
+
+        // Шифруем блок
+        Speck_Encrypt(ctx, block, ciphertext + i * SPECK_BLOCK_SIZE);
+
+        // Обновляем цепочку
+        memcpy(chain, ciphertext + i * SPECK_BLOCK_SIZE, SPECK_BLOCK_SIZE);
+    }
+
+    // Обрабатываем последний неполный блок с дополнением
+    if (length % SPECK_BLOCK_SIZE != 0) {
+        size_t remaining = length % SPECK_BLOCK_SIZE;
+
+        // Копируем оставшиеся данные
+        memcpy(block, plaintext + num_blocks * SPECK_BLOCK_SIZE, remaining);
+
+        // Добавляем дополнение PKCS#7
+        add_pkcs7_padding(block, remaining, SPECK_BLOCK_SIZE);
+
+        // XOR с предыдущим зашифрованным блоком
+        for (size_t j = 0; j < SPECK_BLOCK_SIZE; j++) {
+            block[j] ^= chain[j];
+        }
+
+        // Шифруем последний блок
+        Speck_Encrypt(ctx, block, ciphertext + num_blocks * SPECK_BLOCK_SIZE);
+    }
+    // Если длина кратна размеру блока, добавляем дополнительный блок дополнения
+    else {
+        uint8_t padding_block[SPECK_BLOCK_SIZE];
+        // Заполняем блок значением SPECK_BLOCK_SIZE
+        memset(padding_block, SPECK_BLOCK_SIZE, SPECK_BLOCK_SIZE);
+
+        // XOR с предыдущим зашифрованным блоком
+        for (size_t j = 0; j < SPECK_BLOCK_SIZE; j++) {
+            padding_block[j] ^= chain[j];
+        }
+
+        // Шифруем дополнительный блок
+        Speck_Encrypt(ctx, padding_block, ciphertext + num_blocks * SPECK_BLOCK_SIZE);
+    }
+
+    return padded_length;
+}
+
+size_t Speck_CBC_Decrypt(const SpeckContext* ctx, const uint8_t* ciphertext, size_t length,
+                        const uint8_t* iv, uint8_t* plaintext) {
+    uint8_t block[SPECK_BLOCK_SIZE];
+    uint8_t chain[SPECK_BLOCK_SIZE];
+
+    // Проверяем, что длина кратна размеру блока
+    if (length % SPECK_BLOCK_SIZE != 0 || length == 0) {
+        return 0; // Ошибка - некорректная длина
+    }
+
+    // Копируем IV в цепочку
+    memcpy(chain, iv, SPECK_BLOCK_SIZE);
+
+    // Расшифровываем все блоки
+    size_t num_blocks = length / SPECK_BLOCK_SIZE;
+    for (size_t i = 0; i < num_blocks; i++) {
+        // Расшифровываем блок
+        Speck_Decrypt(ctx, ciphertext + i * SPECK_BLOCK_SIZE, block);
+
+        // XOR с предыдущим зашифрованным блоком (или IV для первого блока)
+        for (size_t j = 0; j < SPECK_BLOCK_SIZE; j++) {
+            plaintext[i * SPECK_BLOCK_SIZE + j] = block[j] ^ chain[j];
+        }
+
+        // Обновляем цепочку
+        memcpy(chain, ciphertext + i * SPECK_BLOCK_SIZE, SPECK_BLOCK_SIZE);
+    }
+
+    // Удаляем дополнение PKCS#7
+    return remove_pkcs7_padding(plaintext, length);
+}

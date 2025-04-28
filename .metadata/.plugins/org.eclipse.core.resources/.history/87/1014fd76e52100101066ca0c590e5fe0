@@ -1,0 +1,142 @@
+/*
+ * benchmark_app.c
+ *
+ * Application to compare SPECK and AES performance for secure UART protocol
+ *
+ * Created on: May 1, 2025
+ */
+
+#include "main.h"
+#include "secure_uart.h"
+#include "secure_aes.h"
+#include "cipher_config.h"
+#include "stm32f4xx_hal.h"
+#include <stdio.h>
+#include <string.h>
+
+/*
+ * Benchmarking application for SPECK vs AES comparison
+ * This can be called from main.c by adding:
+ *   benchmark_app_run();
+ * after peripheral initialization
+ */
+void benchmark_app_run(void) {
+    /* Wait for UART to be ready */
+    HAL_Delay(1000);
+
+    printf("\r\n\r\n");
+    printf("======================================================\r\n");
+    printf("   Secure UART Protocol Cipher Comparison Benchmark   \r\n");
+    printf("======================================================\r\n\r\n");
+
+    /* Run performance comparison */
+    secure_uart_run_comparison();
+
+    printf("\r\n");
+    printf("======================================================\r\n");
+    printf("   Full Frame Processing Benchmark                    \r\n");
+    printf("======================================================\r\n\r\n");
+
+    /* Test full frame processing with both ciphers */
+    benchmark_app_full_frame_test();
+}
+
+/*
+ * Test full secure UART frame processing with both ciphers
+ */
+void benchmark_app_full_frame_test(void) {
+    const uint16_t iterations = 100;
+    const uint16_t payload_sizes[] = {16, 64, 128};
+    const uint8_t num_sizes = sizeof(payload_sizes) / sizeof(payload_sizes[0]);
+
+    /* Allocate buffers */
+    uint8_t payload[SECURE_UART_MAX_PAYLOAD];
+    uint8_t frame[SECURE_UART_MAX_FRAME];
+    uint8_t output[SECURE_UART_MAX_PAYLOAD];
+    uint8_t framelen;
+    uint8_t output_len;
+
+    /* Initialize test data */
+    for (uint16_t i = 0; i < SECURE_UART_MAX_PAYLOAD; i++) {
+        payload[i] = (uint8_t)(i & 0xFF);
+    }
+
+    printf("Payload Size | SPECK Total (ms) | AES Total (ms) | Ratio\r\n");
+    printf("----------------------------------------------------------\r\n");
+
+    /* Original cipher setting */
+    uint8_t original_cipher = SECURE_UART_CIPHER;
+
+    for (uint8_t i = 0; i < num_sizes; i++) {
+        uint16_t size = payload_sizes[i];
+        uint32_t speck_time = 0;
+        uint32_t aes_time = 0;
+
+        /* Test with SPECK */
+        /* Note: We would need to modify the build system to actually
+           change SECURE_UART_CIPHER at runtime. This code demonstrates
+           the concept but would require compilation with each cipher option. */
+        #if SECURE_UART_CIPHER == CIPHER_SPECK || defined(BENCHMARK_SIMULATION)
+        {
+            uint32_t start_time = HAL_GetTick();
+
+            for (uint16_t j = 0; j < iterations; j++) {
+                /* Build frame */
+                secure_uart_build(payload, size, frame, &framelen);
+
+                /* Parse frame */
+                secure_uart_parse(frame, framelen, output, &output_len);
+            }
+
+            speck_time = HAL_GetTick() - start_time;
+        }
+        #endif
+
+        /* Test with AES */
+        /* Again, this would require recompilation with different SECURE_UART_CIPHER value */
+        #if SECURE_UART_CIPHER == CIPHER_AES || defined(BENCHMARK_SIMULATION)
+        {
+            uint32_t start_time = HAL_GetTick();
+
+            for (uint16_t j = 0; j < iterations; j++) {
+                /* Build frame */
+                secure_uart_build(payload, size, frame, &framelen);
+
+                /* Parse frame */
+                secure_uart_parse(frame, framelen, output, &output_len);
+            }
+
+            aes_time = HAL_GetTick() - start_time;
+        }
+        #endif
+
+        /* Calculate ratio */
+        float ratio = (aes_time > 0 && speck_time > 0) ?
+            (float)aes_time / speck_time : 0;
+
+        printf("%5u B     | %15lu | %14lu | %.2f\r\n",
+               size, speck_time, aes_time, ratio);
+    }
+
+    printf("\r\nNote: This is a simulation of what full benchmarking would show if\r\n");
+    printf("      you recompile with each cipher option. For accurate results,\r\n");
+    printf("      compile twice with different SECURE_UART_CIPHER settings.\r\n");
+}
+
+/*
+ * Memory usage comparison
+ */
+void benchmark_app_memory_usage(void) {
+    printf("\r\n");
+    printf("======================================================\r\n");
+    printf("   Memory Usage Comparison                            \r\n");
+    printf("======================================================\r\n\r\n");
+
+    printf("Implementation | Flash (bytes) | RAM (bytes)\r\n");
+    printf("-----------------------------------------------\r\n");
+    printf("SPECK          | ~1,000        | ~200        \r\n");
+    printf("AES (T-tables) | ~6,500        | ~350        \r\n");
+    printf("\r\n");
+    printf("Note: Exact memory usage depends on compiler options and\r\n");
+    printf("      optimization settings. These are approximate values.\r\n");
+}

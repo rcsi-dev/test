@@ -1,0 +1,25 @@
+/*
+ * uart_callbacks.c
+ *
+ *  Created on: Apr 23, 2025
+ *      Author: rcsi
+ */
+
+
+#include "main.h"      /* даёт доступ к RX*_LEN и extern-буферам            */
+#include "usart.h"     /* huart1 / huart6                                   */
+#include <stdio.h>     /* printf → уходит в retarget.c (USART2-TX)          */
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart == &huart1)
+    {
+        printf("USART1 RX: %.*s\r\n", RX1_LEN, rx1_buf);
+        HAL_UART_Receive_IT(&huart1, rx1_buf, RX1_LEN);   /* перезапуск приёма */
+    }
+    else if (huart == &huart6)
+    {
+        printf("USART6 RX: %.*s\r\n", RX6_LEN, rx6_buf);
+        HAL_UART_Receive_IT(&huart6, rx6_buf, RX6_LEN);
+    }
+}

@@ -1,0 +1,491 @@
+/**
+ * @file secure_uart.c
+ * @brief Реализация защищенного протокола UART
+ */
+
+#include "secure_uart.h"
+#include "speck.h"
+#include "siphash.h"
+#include <stdio.h>
+
+/* Включаем DWT для бенчмаркинга */
+#define ENABLE_DWT() do { CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; \
+                          DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk; } while(0)
+#define DWT_GET_CYCLES() (DWT->CYCCNT)
+
+/* Глобальные переменные для бенчмаркинга */
+extern SecureUartBenchmark g_benchmark;
+
+/* Вектор инициализации для шифрования (может быть изменен) */
+static uint8_t g_default_iv[SPECK_BLOCK_SIZE] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+
+/* Внутренние структуры */
+static SpeckContext g_speck_ctx;
+
+/**
+ * @brief Вычисление контрольной суммы заголовка
+ */
+uint16_t SecureUart_CalculateHeaderChecksum(SecureUartHeader* header) {
+    uint16_t original_checksum = header->checksum;
+    header->checksum = 0;
+
+    uint16_t checksum = 0;
+    uint8_t* ptr = (uint8_t*)header;
+
+    for (int i = 0; i < SECURE_UART_HEADER_SIZE; i++) {
+        checksum += ptr[i];
+    }
+
+    header->checksum = original_checksum;
+    return checksum;
+}
+
+/**
+ * @brief Проверка контрольной суммы заголовка
+ */
+bool SecureUart_ValidateHeaderChecksum(SecureUartHeader* header) {
+    uint16_t calculated = SecureUart_CalculateHeaderChecksum(header);
+    return (calculated == header->checksum);
+}
+
+/**
+ * @brief Отправка данных через UART
+ */
+static bool UART_SendData(UART_HandleTypeDef* huart, uint8_t* data, uint16_t size) {
+    HAL_StatusTypeDef status = HAL_UART_Transmit(huart, data, size, 1000);
+    return (status == HAL_OK);
+}
+
+/**
+ * @brief Отправка отладочной информации
+ */
+static void Debug_Print(SecureUartContext* ctx, const char* format, ...) {
+    if (ctx->huart_debug == NULL) {
+        return;
+    }
+
+    char buffer[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+
+    HAL_UART_Transmit(ctx->huart_debug, (uint8_t*)buffer, strlen(buffer), 100);
+}
+
+/**
+ * @brief Инициализация контекста защищенного UART
+ */
+bool SecureUart_Init(SecureUartContext* ctx,
+                     UART_HandleTypeDef* huart_tx,
+                     UART_HandleTypeDef* huart_rx,
+                     UART_HandleTypeDef* huart_debug,
+                     CRC_HandleTypeDef* hcrc,
+                     uint8_t* key,
+                     uint8_t* mac_key) {
+
+    if (ctx == NULL || huart_tx == NULL || huart_rx == NULL || hcrc == NULL || key == NULL || mac_key == NULL) {
+        return false;
+    }
+
+    // Включаем DWT для измерения тактов процессора
+    ENABLE_DWT();
+
+    // Инициализируем контекст
+    ctx->huart_tx = huart_tx;
+    ctx->huart_rx = huart_rx;
+    ctx->huart_debug = huart_debug;
+    ctx->hcrc = hcrc;
+
+    // Копируем ключи
+    memcpy(ctx->key, key, 16);
+    memcpy(ctx->mac_key, mac_key, 16);
+
+    // Инициализируем Speck
+    Speck_Init(&g_speck_ctx, key);
+
+    // Сбрасываем счетчики пакетов
+    ctx->tx_sequence = 0;
+    ctx->rx_sequence = 0;
+
+    // Сбрасываем буфер приема
+    ctx->rx_index = 0;
+    memset(ctx->rx_buffer, 0, sizeof(SecureUartPacket));
+
+    ctx->initialized = true;
+
+    // Выводим отладочную информацию
+    Debug_Print(ctx, "Защищенный UART инициализирован\r\n");
+
+    return true;
+}
+
+/**
+ * @brief Отправка защищенного пакета
+ */
+bool SecureUart_Send(SecureUartContext* ctx,
+                     uint8_t* data,
+                     uint16_t length,
+                     bool encrypt,
+                     bool use_mac) {
+
+    if (!ctx->initialized || length > SECURE_UART_MAX_DATA_LEN) {
+        return false;
+    }
+
+    uint32_t t0, t1;
+    uint32_t t0_frame, t1_frame;
+
+    t0_frame = DWT_GET_CYCLES();
+
+    uint8_t packet_buffer[sizeof(SecureUartPacket)];
+    SecureUartPacket* packet = (SecureUartPacket*)packet_buffer;
+
+    // Заполняем заголовок
+    packet->header.magic = SECURE_UART_MAGIC;
+    packet->header.length = length;
+    packet->header.flags = 0;
+    packet->header.reserved = 0;
+
+    if (encrypt) {
+        packet->header.flags |= SECURE_UART_FLAG_ENCRYPTED;
+    }
+
+    if (use_mac) {
+        packet->header.flags |= SECURE_UART_FLAG_HAS_MAC;
+    }
+
+    // Устанавливаем номер пакета (защита от replay-атак)
+    packet->sequence = ctx->tx_sequence++;
+
+    // Если шифрование требуется, шифруем данные
+    if (encrypt) {
+        t0 = DWT_GET_CYCLES();
+        size_t padded_length = Speck_CBC_Encrypt(&g_speck_ctx, data, length,
+                                                g_default_iv, packet->data);
+        t1 = DWT_GET_CYCLES();
+        g_benchmark.encryption_cycles = t1 - t0;
+
+        // Обновляем длину данных с учетом дополнения
+        packet->header.length = padded_length;
+    } else {
+        // Просто копируем данные
+        memcpy(packet->data, data, length);
+    }
+
+    // Вычисляем контрольную сумму заголовка
+    packet->header.checksum = SecureUart_CalculateHeaderChecksum(&packet->header);
+
+    // Вычисляем CRC32 для всего пакета кроме поля CRC
+    t0 = DWT_GET_CYCLES();
+    // Размер пакета для CRC (заголовок + данные + счетчик + MAC, но не CRC)
+    size_t crc_size = SECURE_UART_HEADER_SIZE + packet->header.length + SECURE_UART_SEQ_SIZE;
+    if (use_mac) {
+        crc_size += SECURE_UART_MAC_SIZE;
+    }
+
+    // Вычисляем аппаратный CRC32
+    __HAL_CRC_DR_RESET(ctx->hcrc);
+    packet->crc = HAL_CRC_Calculate(ctx->hcrc, (uint32_t*)packet_buffer, crc_size / 4);
+
+    // Если размер не кратен 4, добавляем оставшиеся байты
+    if (crc_size % 4 != 0) {
+        uint32_t temp = 0;
+        uint8_t* p_temp = (uint8_t*)&temp;
+        for (int i = 0; i < crc_size % 4; i++) {
+            p_temp[i] = packet_buffer[crc_size - (crc_size % 4) + i];
+        }
+        packet->crc = HAL_CRC_Accumulate(ctx->hcrc, &temp, 1);
+    }
+    t1 = DWT_GET_CYCLES();
+    g_benchmark.crc_cycles = t1 - t0;
+
+    // Если нужен MAC, вычисляем его
+    if (use_mac) {
+        t0 = DWT_GET_CYCLES();
+        // Вычисляем MAC для заголовка, данных и счетчика
+        size_t mac_data_size = SECURE_UART_HEADER_SIZE + packet->header.length + SECURE_UART_SEQ_SIZE;
+        SipHash_2_4_MAC(ctx->mac_key, packet_buffer, mac_data_size, packet->mac);
+        t1 = DWT_GET_CYCLES();
+        g_benchmark.mac_cycles = t1 - t0;
+    }
+
+    // Вычисляем полный размер пакета
+    size_t packet_size = SECURE_UART_HEADER_SIZE + packet->header.length + SECURE_UART_SEQ_SIZE
+                         + SECURE_UART_CRC_SIZE;
+    if (use_mac) {
+        packet_size += SECURE_UART_MAC_SIZE;
+    }
+
+    t1_frame = DWT_GET_CYCLES();
+    g_benchmark.frame_build_cycles = t1_frame - t0_frame;
+
+    // Отправляем пакет
+    bool result = UART_SendData(ctx->huart_tx, packet_buffer, packet_size);
+
+    // Выводим отладочную информацию при успешной отправке
+    if (result) {
+        Debug_Print(ctx, "Отправлен пакет #%lu, размер: %u байт\r\n",
+                   (unsigned long)packet->sequence, (unsigned int)packet_size);
+    } else {
+        Debug_Print(ctx, "Ошибка отправки пакета!\r\n");
+    }
+
+    return result;
+}
+
+/**
+ * @brief Обработка принятого пакета
+ */
+bool SecureUart_ProcessReceived(SecureUartContext* ctx) {
+    if (!ctx->initialized) {
+        return false;
+    }
+
+    uint32_t t0_frame, t1_frame;
+    uint32_t t0, t1;
+
+    t0_frame = DWT_GET_CYCLES();
+
+    SecureUartPacket* packet = (SecureUartPacket*)ctx->rx_buffer;
+
+    // Проверяем магическое число
+    if (packet->header.magic != SECURE_UART_MAGIC) {
+        Debug_Print(ctx, "Ошибка: неверное магическое число\r\n");
+        return false;
+    }
+
+    // Проверяем контрольную сумму заголовка
+    if (!SecureUart_ValidateHeaderChecksum(&packet->header)) {
+        Debug_Print(ctx, "Ошибка: неверная контрольная сумма заголовка\r\n");
+        return false;
+    }
+
+    // Проверяем, не превышает ли длина максимальное значение
+    if (packet->header.length > SECURE_UART_MAX_DATA_LEN) {
+        Debug_Print(ctx, "Ошибка: слишком большой размер данных\r\n");
+        return false;
+    }
+
+    // Проверяем CRC32
+    t0 = DWT_GET_CYCLES();
+
+    // Размер пакета для CRC (заголовок + данные + счетчик + MAC, но не CRC)
+    size_t crc_size = SECURE_UART_HEADER_SIZE + packet->header.length + SECURE_UART_SEQ_SIZE;
+    if (packet->header.flags & SECURE_UART_FLAG_HAS_MAC) {
+        crc_size += SECURE_UART_MAC_SIZE;
+    }
+
+    // Сохраняем оригинальный CRC и вычисляем аппаратный CRC32
+    uint32_t original_crc = packet->crc;
+
+    __HAL_CRC_DR_RESET(ctx->hcrc);
+    uint32_t calculated_crc = HAL_CRC_Calculate(ctx->hcrc, (uint32_t*)ctx->rx_buffer, crc_size / 4);
+
+    // Если размер не кратен 4, добавляем оставшиеся байты
+    if (crc_size % 4 != 0) {
+        uint32_t temp = 0;
+        uint8_t* p_temp = (uint8_t*)&temp;
+        for (int i = 0; i < crc_size % 4; i++) {
+            p_temp[i] = ctx->rx_buffer[crc_size - (crc_size % 4) + i];
+        }
+        calculated_crc = HAL_CRC_Accumulate(ctx->hcrc, &temp, 1);
+    }
+
+    t1 = DWT_GET_CYCLES();
+    g_benchmark.crc_cycles = t1 - t0;
+
+    if (calculated_crc != original_crc) {
+        Debug_Print(ctx, "Ошибка: неверный CRC32\r\n");
+        return false;
+    }
+
+    // Если есть MAC, проверяем его
+    if (packet->header.flags & SECURE_UART_FLAG_HAS_MAC) {
+        t0 = DWT_GET_CYCLES();
+
+        // Сохраняем оригинальный MAC
+        uint8_t original_mac[SECURE_UART_MAC_SIZE];
+        memcpy(original_mac, packet->mac, SECURE_UART_MAC_SIZE);
+
+        // Вычисляем MAC для заголовка, данных и счетчика
+        size_t mac_data_size = SECURE_UART_HEADER_SIZE + packet->header.length + SECURE_UART_SEQ_SIZE;
+        uint8_t calculated_mac[SECURE_UART_MAC_SIZE];
+        SipHash_2_4_MAC(ctx->mac_key, ctx->rx_buffer, mac_data_size, calculated_mac);
+
+        t1 = DWT_GET_CYCLES();
+        g_benchmark.mac_cycles = t1 - t0;
+
+        // Сравниваем MAC
+        if (memcmp(original_mac, calculated_mac, SECURE_UART_MAC_SIZE) != 0) {
+            Debug_Print(ctx, "Ошибка: неверный MAC\r\n");
+            return false;
+        }
+    }
+
+    // Проверяем защиту от replay-атак (порядковый номер пакета)
+    if (packet->sequence <= ctx->rx_sequence) {
+        Debug_Print(ctx, "Внимание: возможная replay-атака, пакет #%lu <= последний #%lu\r\n",
+                   (unsigned long)packet->sequence, (unsigned long)ctx->rx_sequence);
+        return false;
+    }
+
+    // Обновляем счетчик последнего полученного пакета
+    ctx->rx_sequence = packet->sequence;
+
+    // Расшифровываем данные, если они зашифрованы
+    uint8_t decrypted_data[SECURE_UART_MAX_DATA_LEN];
+    uint16_t data_length = packet->header.length;
+
+    if (packet->header.flags & SECURE_UART_FLAG_ENCRYPTED) {
+        t0 = DWT_GET_CYCLES();
+
+        // Расшифровываем данные
+        data_length = Speck_CBC_Decrypt(&g_speck_ctx, packet->data, packet->header.length,
+                                       g_default_iv, decrypted_data);
+
+        t1 = DWT_GET_CYCLES();
+        g_benchmark.encryption_cycles = t1 - t0;
+
+        // Выводим расшифрованные данные в отладочный порт
+        Debug_Print(ctx, "Расшифрованные данные (%u байт): ", data_length);
+        for (int i = 0; i < data_length; i++) {
+            Debug_Print(ctx, "%02X ", decrypted_data[i]);
+        }
+        Debug_Print(ctx, "\r\n");
+    } else {
+        // Просто копируем данные
+        memcpy(decrypted_data, packet->data, data_length);
+
+        // Выводим данные в отладочный порт
+        Debug_Print(ctx, "Полученные данные (%u байт): ", data_length);
+        for (int i = 0; i < data_length; i++) {
+            Debug_Print(ctx, "%02X ", decrypted_data[i]);
+        }
+        Debug_Print(ctx, "\r\n");
+    }
+
+    t1_frame = DWT_GET_CYCLES();
+    g_benchmark.frame_parse_cycles = t1_frame - t0_frame;
+
+    Debug_Print(ctx, "Успешно принят пакет #%lu\r\n", (unsigned long)packet->sequence);
+
+    return true;
+}
+
+/**
+ * @brief Начало приема данных (в режиме прерываний)
+ */
+void SecureUart_StartReceive(SecureUartContext* ctx) {
+    if (!ctx->initialized) {
+        return;
+    }
+
+    // Сбрасываем индекс приема
+    ctx->rx_index = 0;
+
+    // Начинаем прием первого байта
+    HAL_UART_Receive_IT(ctx->huart_rx, &ctx->rx_buffer[ctx->rx_index], 1);
+}
+
+/**
+ * @brief Колбэк завершения приема по UART
+ * Эта функция должна быть вызвана из обработчика прерывания HAL_UART_RxCpltCallback
+ */
+void SecureUart_RxCpltCallback(SecureUartContext* ctx, UART_HandleTypeDef* huart) {
+    if (!ctx->initialized || huart != ctx->huart_rx) {
+        return;
+    }
+
+    // Увеличиваем индекс приема
+    ctx->rx_index++;
+
+    // Проверяем, получили ли мы заголовок
+    if (ctx->rx_index == SECURE_UART_HEADER_SIZE) {
+        SecureUartHeader* header = (SecureUartHeader*)ctx->rx_buffer;
+
+        // Проверяем магическое число
+        if (header->magic != SECURE_UART_MAGIC) {
+            // Неверное магическое число, сбрасываем прием
+            ctx->rx_index = 0;
+            HAL_UART_Receive_IT(ctx->huart_rx, &ctx->rx_buffer[ctx->rx_index], 1);
+            return;
+        }
+
+        // Проверяем контрольную сумму заголовка
+        if (!SecureUart_ValidateHeaderChecksum(header)) {
+            // Неверная контрольная сумма, сбрасываем прием
+            ctx->rx_index = 0;
+            HAL_UART_Receive_IT(ctx->huart_rx, &ctx->rx_buffer[ctx->rx_index], 1);
+            return;
+        }
+
+        // Проверяем длину данных
+        if (header->length > SECURE_UART_MAX_DATA_LEN) {
+            // Слишком большой размер, сбрасываем прием
+            ctx->rx_index = 0;
+            HAL_UART_Receive_IT(ctx->huart_rx, &ctx->rx_buffer[ctx->rx_index], 1);
+            return;
+        }
+
+        // Вычисляем размер оставшихся данных
+        uint16_t remaining_size = header->length + SECURE_UART_SEQ_SIZE + SECURE_UART_CRC_SIZE;
+        if (header->flags & SECURE_UART_FLAG_HAS_MAC) {
+            remaining_size += SECURE_UART_MAC_SIZE;
+        }
+
+        // Принимаем оставшиеся данные
+        HAL_UART_Receive_IT(ctx->huart_rx, &ctx->rx_buffer[ctx->rx_index], remaining_size);
+    } else {
+        // Проверяем, получили ли мы полный пакет
+        SecureUartHeader* header = (SecureUartHeader*)ctx->rx_buffer;
+        uint16_t total_size = SECURE_UART_HEADER_SIZE + header->length + SECURE_UART_SEQ_SIZE + SECURE_UART_CRC_SIZE;
+        if (header->flags & SECURE_UART_FLAG_HAS_MAC) {
+            total_size += SECURE_UART_MAC_SIZE;
+        }
+
+        if (ctx->rx_index >= total_size) {
+            // Полный пакет получен, обрабатываем его
+            SecureUart_ProcessReceived(ctx);
+
+            // Начинаем новый прием
+            ctx->rx_index = 0;
+            HAL_UART_Receive_IT(ctx->huart_rx, &ctx->rx_buffer[ctx->rx_index], 1);
+        } else {
+            // Продолжаем прием по одному байту
+            HAL_UART_Receive_IT(ctx->huart_rx, &ctx->rx_buffer[ctx->rx_index], 1);
+        }
+    }
+}
+
+/**
+ * @brief Вывод результатов бенчмаркинга
+ */
+void SecureUart_PrintBenchmark(SecureUartContext* ctx, SecureUartBenchmark* benchmark) {
+    if (!ctx->initialized || benchmark == NULL) {
+        return;
+    }
+
+    Debug_Print(ctx, "\r\n----- Результаты бенчмаркинга -----\r\n");
+    Debug_Print(ctx, "Сборка фрейма: %lu тактов\r\n", (unsigned long)benchmark->frame_build_cycles);
+    Debug_Print(ctx, "Разбор фрейма: %lu тактов\r\n", (unsigned long)benchmark->frame_parse_cycles);
+    Debug_Print(ctx, "Шифрование: %lu тактов\r\n", (unsigned long)benchmark->encryption_cycles);
+    Debug_Print(ctx, "MAC: %lu тактов\r\n", (unsigned long)benchmark->mac_cycles);
+    Debug_Print(ctx, "CRC: %lu тактов\r\n", (unsigned long)benchmark->crc_cycles);
+    Debug_Print(ctx, "--------------------------------\r\n\r\n");
+}
+
+/**
+ * @brief Сброс результатов бенчмаркинга
+ */
+void SecureUart_ResetBenchmark(SecureUartBenchmark* benchmark) {
+    if (benchmark == NULL) {
+        return;
+    }
+
+    benchmark->frame_build_cycles = 0;
+    benchmark->frame_parse_cycles = 0;
+    benchmark->encryption_cycles = 0;
+    benchmark->mac_cycles = 0;
+    benchmark->crc_cycles = 0;
+}

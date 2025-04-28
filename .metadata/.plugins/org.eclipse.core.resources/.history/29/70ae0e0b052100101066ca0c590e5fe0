@@ -1,0 +1,69 @@
+/*
+ * uart_callbacks.c
+ *
+ *  Created on: Apr 23, 2025
+ *      Author: rcsi
+ */
+
+
+#include "main.h"
+#include "usart.h"
+#include "secure_uart.h"
+#include <stdio.h>
+
+static void dump_hex(const char *tag,
+                     const uint8_t *buf, uint16_t len)
+{
+    printf("%s (%u B): ", tag, len);
+    for (uint16_t i = 0; i < len; ++i)
+        printf("%02X ", buf[i]);
+    printf("\r\n");
+}
+
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+    rx_state_t *st    = (huart == &huart1) ? &rx1 : &rx6;
+    uint8_t    *dma   = (huart == &huart1) ? rx1_dma : rx6_dma;
+    uint16_t    total = st->wr + Size;
+
+    /* 1. дописываем свежую порцию в конец буфера */
+    memcpy(st->buf + st->wr, dma, Size);
+    st->wr = total;
+
+    /* 2. пока в буфере достаточно данных для полного кадра */
+    while (st->wr >= 4) {                         /* минимум SYNC+LEN+CNT */
+        if (st->buf[0] != 0x55 || st->buf[1] != 0xAA) {
+            /* сдвигаем до следующего SYNC */
+            memmove(st->buf, st->buf + 1, --st->wr);
+            continue;
+        }
+        uint8_t need = st->buf[2] + 3;            /* полная длина кадра */
+        if (st->wr < need) break;                 /* ждём ещё байты */
+
+        /* --- у нас полноценный кадр --- */
+        uint8_t plain[SECURE_UART_MAX_PAYLOAD];
+        uint8_t plen;
+        secure_uart_status_t s =
+            secure_uart_parse(st->buf, need, plain, &plen);
+
+        dump_hex("RAW ", st->buf, need);
+        printf("%s: %s, %u B\r\n",
+               (huart==&huart1)?"USART1":"USART6",
+               secure_uart_status_str(s), plen);
+        if (s == SECURE_UART_OK)
+            printf("Payload: %.*s\r\n", plen, plain);
+
+        /* 3. выбрасываем обработанный кадр, сдвигаем хвост в начало */
+        st->wr -= need;
+        memmove(st->buf, st->buf + need, st->wr);
+    }
+
+    /* перезапуск DMA */
+    HAL_UARTEx_ReceiveToIdle_DMA(huart, dma,
+                                 (huart==&huart1)?RX1_LEN:RX6_LEN);
+    __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
+}
+
+
+

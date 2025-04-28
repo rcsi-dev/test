@@ -1,0 +1,185 @@
+/**
+  ******************************************************************************
+  * @file    benchmark.c
+  * @brief   Реализация функций бенчмаркинга для защищенного протокола
+  ******************************************************************************
+  */
+
+#include "benchmark.h"
+#include "frame.h"
+#include "ascon.h"
+#include <stdio.h>
+#include <string.h>
+
+// Инициализация таймера для бенчмаркинга
+void Benchmark_Init(void) {
+    // Настройка DWT (Data Watchpoint and Trace)
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;  // Включение DWT
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;             // Включение счетчика тактов
+    DWT->CYCCNT = 0;                                // Сброс счетчика
+}
+
+// Начало измерения времени
+uint32_t Benchmark_StartMeasurement(void) {
+    DWT->CYCCNT = 0;  // Сброс счетчика
+    return DWT->CYCCNT;
+}
+
+// Окончание измерения времени
+uint32_t Benchmark_StopMeasurement(uint32_t startTime) {
+    uint32_t stopTime = DWT->CYCCNT;
+    return stopTime - startTime;
+}
+
+// Выполнение тестов производительности для одного размера полезной нагрузки
+BenchmarkResult Benchmark_RunTest(SecureUartHandle* handle, uint16_t payloadSize) {
+    BenchmarkResult result;
+    uint32_t startTime, elapsedTime;
+    uint8_t testData[SECURE_UART_MAX_PAYLOAD_SIZE];
+    uint8_t encryptedData[SECURE_UART_MAX_PAYLOAD_SIZE];
+    uint8_t decryptedData[SECURE_UART_MAX_PAYLOAD_SIZE];
+    uint8_t frameBuffer[SECURE_UART_MAX_FRAME_SIZE];
+    uint16_t frameLength = 0;
+    uint16_t outputLength = 0;
+    Frame testFrame;
+    uint8_t tag[ASCON_TAG_SIZE];
+
+    // Инициализация результатов
+    memset(&result, 0, sizeof(BenchmarkResult));
+    result.payloadSize = payloadSize;
+
+    // Генерация тестовых данных (для простоты - заполнение последовательными числами)
+    for (uint16_t i = 0; i < payloadSize; i++) {
+        testData[i] = i & 0xFF;
+    }
+
+    // 1. Измерение времени сборки фрейма
+    startTime = Benchmark_StartMeasurement();
+    Frame_Init(&testFrame, handle->txCounter, SECURE_UART_VERSION);
+    Frame_Build(&testFrame, testData, payloadSize, handle->key, frameBuffer, &frameLength);
+    result.frameBuildTime = Benchmark_StopMeasurement(startTime);
+
+    // 2. Измерение времени разбора фрейма
+    startTime = Benchmark_StartMeasurement();
+    Frame_Parse(frameBuffer, frameLength, handle->key, &testFrame, decryptedData, &outputLength);
+    result.frameParseTime = Benchmark_StopMeasurement(startTime);
+
+    // 3. Измерение времени шифрования
+    uint8_t nonce[16] = {0};
+    memcpy(nonce, &handle->txCounter, sizeof(uint32_t));
+
+    startTime = Benchmark_StartMeasurement();
+    ascon128_encrypt(handle->key, nonce, NULL, 0, testData, payloadSize, encryptedData, tag);
+    result.encryptionTime = Benchmark_StopMeasurement(startTime);
+
+    // 4. Измерение времени дешифрования
+    startTime = Benchmark_StartMeasurement();
+    ascon128_decrypt(handle->key, nonce, NULL, 0, encryptedData, payloadSize, tag, decryptedData);
+    result.decryptionTime = Benchmark_StopMeasurement(startTime);
+
+    // 5. Измерение времени генерации MAC
+    startTime = Benchmark_StartMeasurement();
+    ascon_mac(handle->key, testData, payloadSize, tag);
+    result.macGenerationTime = Benchmark_StopMeasurement(startTime);
+
+    // 6. Измерение времени проверки MAC
+    startTime = Benchmark_StartMeasurement();
+    ascon_mac_verify(handle->key, testData, payloadSize, tag);
+    result.macVerificationTime = Benchmark_StopMeasurement(startTime);
+
+    // 7. Измерение времени вычисления CRC
+    startTime = Benchmark_StartMeasurement();
+    Frame_CalculateCRC32(testData, payloadSize);
+    result.crcCalculationTime = Benchmark_StopMeasurement(startTime);
+
+    return result;
+}
+
+// Выполнение серии тестов с разными размерами данных
+void Benchmark_RunSeries(SecureUartHandle* handle,
+                        uint16_t* payloadSizes,
+                        uint8_t numTests,
+                        BenchmarkResult* results) {
+    for (uint8_t i = 0; i < numTests; i++) {
+        results[i] = Benchmark_RunTest(handle, payloadSizes[i]);
+    }
+}
+
+// Вывод результатов бенчмаркинга
+void Benchmark_PrintResults(SecureUartHandle* handle,
+                           const BenchmarkResult* results,
+                           uint8_t numResults) {
+    char buffer[128];
+
+    // Вывод заголовка таблицы
+    sprintf(buffer, "\r\n=== Результаты бенчмаркинга (в тактах процессора) ===\r\n");
+    HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    sprintf(buffer, "Размер | Сборка | Парсинг | Шифр | Дешифр | MAC-ген | MAC-пров | CRC\r\n");
+    HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    sprintf(buffer, "----------------------------------------------------------------------\r\n");
+    HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    // Вывод результатов для каждого размера данных
+    for (uint8_t i = 0; i < numResults; i++) {
+        sprintf(buffer, "%5d | %6lu | %7lu | %4lu | %6lu | %7lu | %8lu | %lu\r\n",
+                results[i].payloadSize,
+                results[i].frameBuildTime,
+                results[i].frameParseTime,
+                results[i].encryptionTime,
+                results[i].decryptionTime,
+                results[i].macGenerationTime,
+                results[i].macVerificationTime,
+                results[i].crcCalculationTime);
+
+        HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+    }
+
+    sprintf(buffer, "----------------------------------------------------------------------\r\n");
+    HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+}
+
+// Сравнение результатов различных конфигураций
+void Benchmark_CompareResults(SecureUartHandle* handle,
+                             const BenchmarkResult* results1,
+                             const BenchmarkResult* results2,
+                             uint8_t numResults) {
+    char buffer[128];
+
+    // Вывод заголовка таблицы сравнения
+    sprintf(buffer, "\r\n=== Сравнение результатов (разница в %%) ===\r\n");
+    HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    sprintf(buffer, "Размер | Сборка | Парсинг | Шифр | Дешифр | MAC-ген | MAC-пров | CRC\r\n");
+    HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    sprintf(buffer, "----------------------------------------------------------------------\r\n");
+    HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    // Вывод сравнения для каждого размера данных
+    for (uint8_t i = 0; i < numResults; i++) {
+        float diffBuild = ((float)results2[i].frameBuildTime / results1[i].frameBuildTime - 1.0f) * 100.0f;
+        float diffParse = ((float)results2[i].frameParseTime / results1[i].frameParseTime - 1.0f) * 100.0f;
+        float diffEncrypt = ((float)results2[i].encryptionTime / results1[i].encryptionTime - 1.0f) * 100.0f;
+        float diffDecrypt = ((float)results2[i].decryptionTime / results1[i].decryptionTime - 1.0f) * 100.0f;
+        float diffMacGen = ((float)results2[i].macGenerationTime / results1[i].macGenerationTime - 1.0f) * 100.0f;
+        float diffMacVer = ((float)results2[i].macVerificationTime / results1[i].macVerificationTime - 1.0f) * 100.0f;
+        float diffCrc = ((float)results2[i].crcCalculationTime / results1[i].crcCalculationTime - 1.0f) * 100.0f;
+
+        sprintf(buffer, "%5d | %+6.1f | %+7.1f | %+4.1f | %+6.1f | %+7.1f | %+8.1f | %+.1f\r\n",
+                results1[i].payloadSize,
+                diffBuild,
+                diffParse,
+                diffEncrypt,
+                diffDecrypt,
+                diffMacGen,
+                diffMacVer,
+                diffCrc);
+
+        HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+    }
+
+    sprintf(buffer, "----------------------------------------------------------------------\r\n");
+    HAL_UART_Transmit(handle->huartMonitor, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+}

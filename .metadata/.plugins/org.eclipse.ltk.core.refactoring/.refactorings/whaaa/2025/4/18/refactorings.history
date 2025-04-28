@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;whaaa/Core/Inc/cmac.c&apos; to &apos;cmac.h&apos;" description="Rename resource &apos;cmac.c&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="Core/Inc/cmac.c" name="cmac.h" stamp="1745797353139" updateReferences="true"/>
+</session>

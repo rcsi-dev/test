@@ -1,0 +1,105 @@
+/**
+ * @file secure_uart.h
+ * @brief Заголовочный файл для защищенного протокола UART
+ */
+
+#ifndef SECURE_UART_H_
+#define SECURE_UART_H_
+
+#include "stm32f4xx_hal.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include <stdarg.h>
+#include <stdio.h>
+
+/* Константы протокола */
+#define SECURE_UART_MAGIC          0xA5C3   // Магическое число для идентификации пакетов
+#define SECURE_UART_MAX_DATA_LEN   1024     // Максимальный размер данных
+#define SECURE_UART_HEADER_SIZE    8        // Размер заголовка в байтах
+#define SECURE_UART_MAC_SIZE       8        // Размер MAC в байтах
+#define SECURE_UART_CRC_SIZE       4        // Размер CRC в байтах
+#define SECURE_UART_SEQ_SIZE       4        // Размер счетчика пакетов в байтах
+#define SECURE_UART_BLOCK_SIZE     8        // Размер блока шифрования Speck
+
+#define SECURE_UART_FLAG_ENCRYPTED 0x01     // Флаг: данные зашифрованы
+#define SECURE_UART_FLAG_HAS_MAC   0x02     // Флаг: MAC присутствует
+#define SECURE_UART_FLAG_ACK_REQ   0x04     // Флаг: требуется подтверждение
+
+/* Структура заголовка пакета */
+typedef struct {
+    uint16_t magic;           // Магическое число (0xA5C3)
+    uint16_t length;          // Длина данных
+    uint8_t flags;            // Флаги пакета
+    uint8_t reserved;         // Зарезервировано для будущего использования
+    uint16_t checksum;        // Контрольная сумма заголовка
+} SecureUartHeader;
+
+/* Структура полного пакета */
+typedef struct {
+    SecureUartHeader header;              // Заголовок
+    uint8_t data[SECURE_UART_MAX_DATA_LEN]; // Данные
+    uint8_t padding[SECURE_UART_BLOCK_SIZE]; // Выравнивание блока
+    uint32_t sequence;                    // Счетчик пакетов
+    uint8_t mac[SECURE_UART_MAC_SIZE];    // MAC
+    uint32_t crc;                         // CRC32
+} SecureUartPacket;
+
+/* Структура контекста безопасного UART */
+typedef struct {
+    UART_HandleTypeDef* huart_tx;     // UART для передачи
+    UART_HandleTypeDef* huart_rx;     // UART для приема
+    UART_HandleTypeDef* huart_debug;  // UART для отладки
+    CRC_HandleTypeDef* hcrc;          // Аппаратный CRC
+
+    uint32_t tx_sequence;             // Счетчик исходящих пакетов
+    uint32_t rx_sequence;             // Счетчик входящих пакетов
+
+    uint8_t key[16];                  // Ключ шифрования (128 бит)
+    uint8_t mac_key[16];              // Ключ для MAC (128 бит)
+
+    uint8_t rx_buffer[sizeof(SecureUartPacket)]; // Буфер приема
+    uint32_t rx_index;                          // Текущий индекс приема
+
+    bool initialized;                 // Флаг инициализации
+} SecureUartContext;
+
+/* Инициализация, конфигурирование и обработка пакетов */
+bool SecureUart_Init(SecureUartContext* ctx,
+                    UART_HandleTypeDef* huart_tx,
+                    UART_HandleTypeDef* huart_rx,
+                    UART_HandleTypeDef* huart_debug,
+                    CRC_HandleTypeDef* hcrc,
+                    uint8_t* key,
+                    uint8_t* mac_key);
+
+bool SecureUart_Send(SecureUartContext* ctx,
+                    uint8_t* data,
+                    uint16_t length,
+                    bool encrypt,
+                    bool use_mac);
+
+bool SecureUart_ProcessReceived(SecureUartContext* ctx);
+
+void SecureUart_StartReceive(SecureUartContext* ctx);
+
+/* Обработчик прерывания приема UART */
+void SecureUart_RxCpltCallback(SecureUartContext* ctx, UART_HandleTypeDef* huart);
+
+/* Бенчмаркинг */
+typedef struct {
+    uint32_t frame_build_cycles;
+    uint32_t frame_parse_cycles;
+    uint32_t encryption_cycles;
+    uint32_t mac_cycles;
+    uint32_t crc_cycles;
+} SecureUartBenchmark;
+
+void SecureUart_PrintBenchmark(SecureUartContext* ctx, SecureUartBenchmark* benchmark);
+void SecureUart_ResetBenchmark(SecureUartBenchmark* benchmark);
+
+/* Служебные функции */
+uint16_t SecureUart_CalculateHeaderChecksum(SecureUartHeader* header);
+bool SecureUart_ValidateHeaderChecksum(SecureUartHeader* header);
+
+#endif /* SECURE_UART_H_ */
