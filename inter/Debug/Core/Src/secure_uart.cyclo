@@ -1,0 +1,12 @@
+../Core/Src/secure_uart.c:21:6:SecureUart_Init	1
+../Core/Src/secure_uart.c:41:6:SecureUart_EnableEncryption	1
+../Core/Src/secure_uart.c:54:6:SecureUart_EnableMAC	1
+../Core/Src/secure_uart.c:66:6:SecureUart_StartReceive	1
+../Core/Src/secure_uart.c:80:6:SecureUart_GenerateIV	1
+../Core/Src/secure_uart.c:92:6:SecureUart_CalculateMAC	1
+../Core/Src/secure_uart.c:102:10:SecureUart_CalculateCRC	4
+../Core/Src/secure_uart.c:124:18:SecureUart_Send	7
+../Core/Src/secure_uart.c:214:18:SecureUart_ProcessReceivedData	14
+../Core/Src/secure_uart.c:344:6:SecureUart_HandleUartRxEvent	3
+../Core/Src/secure_uart.c:378:6:SecureUart_DebugPrint	2
+../Core/Src/secure_uart.c:397:6:SecureUart_PrintHexBuffer	5

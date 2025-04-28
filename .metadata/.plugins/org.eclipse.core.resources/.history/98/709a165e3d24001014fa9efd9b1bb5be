@@ -1,0 +1,123 @@
+/**
+  ******************************************************************************
+  * @file           : packet.h
+  * @brief          : Заголовочный файл модуля работы с пакетами данных
+  ******************************************************************************
+  */
+
+#ifndef __PACKET_H
+#define __PACKET_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Includes ------------------------------------------------------------------*/
+#include "stm32f4xx_hal.h"
+#include <stdint.h>
+
+/* Exported constants --------------------------------------------------------*/
+#define PACKET_MAX_DATA_SIZE    128   // Максимальный размер данных в пакете
+#define PACKET_HEADER_SIZE      4     // Размер заголовка пакета
+#define PACKET_FOOTER_SIZE      2     // Размер окончания пакета (CRC пока не используется)
+
+// Магические байты пакета
+#define PACKET_START_MARKER     0xA5  // Маркер начала пакета
+#define PACKET_END_MARKER       0x5A  // Маркер конца пакета
+
+/* Exported types ------------------------------------------------------------*/
+
+// Структура заголовка пакета
+typedef struct {
+    uint8_t start_marker;       // Маркер начала пакета (0xA5)
+    uint8_t packet_id;          // Идентификатор пакета (используется для защиты от Replay-атак)
+    uint8_t packet_type;        // Тип пакета
+    uint8_t data_length;        // Длина данных в пакете
+} PacketHeader;
+
+// Структура пакета целиком
+typedef struct {
+    PacketHeader header;                      // Заголовок пакета
+    uint8_t data[PACKET_MAX_DATA_SIZE];       // Данные пакета
+    uint16_t crc;                             // CRC для проверки целостности (в будущем)
+    uint8_t end_marker;                       // Маркер конца пакета (0x5A)
+} Packet;
+
+// Определение типов пакетов
+typedef enum {
+    PACKET_TYPE_DATA = 0x01,    // Пакет с данными
+    PACKET_TYPE_ACK = 0x02,     // Подтверждение
+    PACKET_TYPE_NACK = 0x03,    // Отрицательное подтверждение
+    PACKET_TYPE_PING = 0x04,    // Проверка соединения
+    PACKET_TYPE_RESET = 0x05    // Сброс состояния
+} PacketType;
+
+// Состояние парсера пакетов
+typedef enum {
+    PACKET_STATE_IDLE,             // Ожидание начала пакета
+    PACKET_STATE_HEADER,           // Приём заголовка
+    PACKET_STATE_DATA,             // Приём данных
+    PACKET_STATE_CRC,              // Приём CRC
+    PACKET_STATE_END               // Ожидание конца пакета
+} PacketParserState;
+
+// Структура парсера пакетов
+typedef struct {
+    PacketParserState state;        // Текущее состояние парсера
+    uint8_t header_index;           // Индекс байта заголовка
+    uint8_t data_index;             // Индекс байта данных
+    uint8_t crc_index;              // Индекс байта CRC
+    Packet current_packet;          // Текущий собираемый пакет
+} PacketParser;
+
+/* Exported functions prototypes ---------------------------------------------*/
+
+/**
+ * @brief  Инициализация парсера пакетов
+ * @param  parser Указатель на структуру парсера
+ * @retval None
+ */
+void Packet_InitParser(PacketParser *parser);
+
+/**
+ * @brief  Создание нового пакета
+ * @param  packet Указатель на структуру пакета
+ * @param  packet_type Тип пакета
+ * @param  packet_id Идентификатор пакета
+ * @param  data Указатель на данные
+ * @param  data_length Длина данных
+ * @retval None
+ */
+void Packet_Create(Packet *packet, PacketType packet_type, uint8_t packet_id,
+                   const uint8_t *data, uint8_t data_length);
+
+/**
+ * @brief  Сериализация пакета в буфер для отправки
+ * @param  packet Указатель на структуру пакета
+ * @param  buffer Буфер для сериализованных данных
+ * @param  buffer_size Размер буфера
+ * @retval Размер сериализованных данных или 0 в случае ошибки
+ */
+uint16_t Packet_Serialize(const Packet *packet, uint8_t *buffer, uint16_t buffer_size);
+
+/**
+ * @brief  Обработка входящего байта и построение пакета
+ * @param  parser Указатель на структуру парсера
+ * @param  byte Входящий байт данных
+ * @retval 1 если пакет полностью собран, 0 в противном случае
+ */
+uint8_t Packet_ParseByte(PacketParser *parser, uint8_t byte);
+
+/**
+ * @brief  Расчет CRC для данных пакета
+ * @param  data Указатель на данные
+ * @param  length Длина данных
+ * @retval Значение CRC
+ */
+uint16_t Packet_CalculateCRC(const uint8_t *data, uint16_t length);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __PACKET_H */

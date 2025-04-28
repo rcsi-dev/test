@@ -1,0 +1,86 @@
+/**
+ * @file speck.h
+ * @brief Реализация алгоритма шифрования Speck
+ *
+ * Реализация блочного шифра Speck (вариант Speck64/128)
+ * Speck использует операции ARX (Addition, Rotation, XOR)
+ */
+
+#ifndef SPECK_H_
+#define SPECK_H_
+
+#include <stdint.h>
+#include <stddef.h>
+
+/* Константы для Speck64/128 */
+#define SPECK_BLOCK_SIZE      8    // Размер блока в байтах (64 бита)
+#define SPECK_KEY_SIZE        16   // Размер ключа в байтах (128 бит)
+#define SPECK_ROUNDS          27   // Количество раундов для Speck64/128
+#define SPECK_WORD_SIZE       32   // Размер слова в битах
+
+/* Структура для хранения ключей раундов */
+typedef struct {
+    uint32_t round_keys[SPECK_ROUNDS];
+} SpeckContext;
+
+/**
+ * @brief Инициализация контекста Speck c предварительной генерацией ключей раундов
+ *
+ * @param ctx Указатель на контекст Speck
+ * @param key Указатель на ключ (128 бит / 16 байт)
+ */
+void Speck_Init(SpeckContext* ctx, const uint8_t* key);
+
+/**
+ * @brief Шифрование одного блока данных
+ *
+ * @param ctx Указатель на контекст Speck
+ * @param plaintext Указатель на открытый текст (8 байт)
+ * @param ciphertext Указатель на буфер для зашифрованного текста (8 байт)
+ */
+void Speck_Encrypt(const SpeckContext* ctx, const uint8_t* plaintext, uint8_t* ciphertext);
+
+/**
+ * @brief Расшифрование одного блока данных
+ *
+ * @param ctx Указатель на контекст Speck
+ * @param ciphertext Указатель на зашифрованный текст (8 байт)
+ * @param plaintext Указатель на буфер для расшифрованного текста (8 байт)
+ */
+void Speck_Decrypt(const SpeckContext* ctx, const uint8_t* ciphertext, uint8_t* plaintext);
+
+/**
+ * @brief Шифрование данных произвольной длины в режиме CBC
+ *
+ * @param ctx Указатель на контекст Speck
+ * @param plaintext Указатель на открытый текст
+ * @param length Длина открытого текста в байтах
+ * @param iv Вектор инициализации (8 байт)
+ * @param ciphertext Указатель на буфер для зашифрованного текста
+ * @return Длина зашифрованного текста в байтах (с дополнением)
+ */
+size_t Speck_CBC_Encrypt(const SpeckContext* ctx, const uint8_t* plaintext, size_t length,
+                        const uint8_t* iv, uint8_t* ciphertext);
+
+/**
+ * @brief Расшифрование данных произвольной длины в режиме CBC
+ *
+ * @param ctx Указатель на контекст Speck
+ * @param ciphertext Указатель на зашифрованный текст
+ * @param length Длина зашифрованного текста в байтах
+ * @param iv Вектор инициализации (8 байт)
+ * @param plaintext Указатель на буфер для расшифрованного текста
+ * @return Длина расшифрованного текста в байтах (без дополнения)
+ */
+size_t Speck_CBC_Decrypt(const SpeckContext* ctx, const uint8_t* ciphertext, size_t length,
+                        const uint8_t* iv, uint8_t* plaintext);
+
+/**
+ * @brief Вычисление размера дополненного текста
+ *
+ * @param length Исходная длина текста
+ * @return Длина дополненного текста
+ */
+size_t Speck_GetPaddedLength(size_t length);
+
+#endif /* SPECK_H_ */

@@ -1,0 +1,10 @@
+../Core/Src/speck.c:20:17:bytes_to_word	1
+../Core/Src/speck.c:30:13:word_to_bytes	1
+../Core/Src/speck.c:37:6:Speck_Init	2
+../Core/Src/speck.c:57:6:Speck_Encrypt	2
+../Core/Src/speck.c:75:6:Speck_Decrypt	2
+../Core/Src/speck.c:96:13:add_pkcs7_padding	2
+../Core/Src/speck.c:106:15:remove_pkcs7_padding	6
+../Core/Src/speck.c:126:8:Speck_GetPaddedLength	1
+../Core/Src/speck.c:133:8:Speck_Encrypt_Simple	2
+../Core/Src/speck.c:160:8:Speck_Decrypt_Simple	3

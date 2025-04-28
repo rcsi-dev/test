@@ -1,0 +1,70 @@
+/**
+ * @file secure_uart.h
+ * @brief Заголовочный файл для реализации защищенного UART протокола
+ */
+
+#ifndef SECURE_UART_H
+#define SECURE_UART_H
+
+#include "main.h"
+#include <stdint.h>
+#include <string.h>
+#include <stdbool.h>
+
+/* Определения для структуры фрейма */
+#define FRAME_HEADER_SIZE     4         // Размер заголовка фрейма
+#define FRAME_HEADER          0xA55A5AA5// Магическое число для идентификации начала фрейма
+#define MAX_DATA_SIZE         128       // Максимальный размер данных
+#define SEQUENCE_ID_SIZE      4         // Размер идентификатора последовательности (4 байта)
+#define CRC_SIZE              2         // Размер контрольной суммы (2 байта)
+
+/* Структура защищенного фрейма:
+ * +----------------+------------------+------------+----------------+------------+
+ * | Заголовок (4B) | Sequence ID (4B) | Длина (1B) | Данные (до 128B) | CRC (2B) |
+ * +----------------+------------------+------------+----------------+------------+
+ */
+
+#define MIN_FRAME_SIZE        (FRAME_HEADER_SIZE + SEQUENCE_ID_SIZE + 1 + CRC_SIZE) // Минимальный размер фрейма без данных
+#define MAX_FRAME_SIZE        (MIN_FRAME_SIZE + MAX_DATA_SIZE)                      // Максимальный размер фрейма
+
+/* Статусы операций */
+typedef enum {
+    SECURE_UART_OK = 0,
+    SECURE_UART_ERROR,
+    SECURE_UART_INVALID_FRAME,
+    SECURE_UART_REPLAY_ATTACK,
+    SECURE_UART_CRC_ERROR,
+    SECURE_UART_BUFFER_OVERFLOW
+} SecureUartStatus;
+
+/* Структура для хранения распакованных данных из фрейма */
+typedef struct {
+    uint32_t sequence_id;
+    uint8_t data_length;
+    uint8_t data[MAX_DATA_SIZE];
+} SecureUartPacket;
+
+/* Структура для хранения контекста UART интерфейса */
+typedef struct {
+    UART_HandleTypeDef *huart;       // Дескриптор UART
+    UART_HandleTypeDef *debug_uart;  // Дескриптор UART для отладки
+    uint8_t rx_buffer[MAX_FRAME_SIZE]; // Буфер для приема
+    uint16_t rx_pos;                 // Текущая позиция в буфере приема
+    uint32_t last_sequence_id;       // Последний полученный sequence_id (для защиты от replay)
+} SecureUartContext;
+
+/* Функции инициализации */
+void SecureUart_Init(SecureUartContext *ctx, UART_HandleTypeDef *huart, UART_HandleTypeDef *debug_uart);
+void SecureUart_StartReceive(SecureUartContext *ctx);
+
+/* Функции обработки данных */
+SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, uint8_t length);
+SecureUartStatus SecureUart_ProcessReceivedData(SecureUartContext *ctx, SecureUartPacket *packet);
+
+/* Вспомогательные функции */
+uint16_t SecureUart_CalculateCRC(const uint8_t *data, uint16_t length);
+void SecureUart_HandleUartRxEvent(SecureUartContext *ctx);
+void SecureUart_DebugPrint(UART_HandleTypeDef *huart, const char *format, ...);
+void SecureUart_PrintHexBuffer(UART_HandleTypeDef *huart, const char *prefix, const uint8_t *buffer, uint16_t length);
+
+#endif /* SECURE_UART_H */

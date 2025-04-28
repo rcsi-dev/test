@@ -1,0 +1,106 @@
+/**
+  ******************************************************************************
+  * @file    secure_uart_protocol.h
+  * @brief   Заголовочный файл защищенного протокола UART
+  ******************************************************************************
+  */
+
+#ifndef SECURE_UART_PROTOCOL_H
+#define SECURE_UART_PROTOCOL_H
+
+#include "main.h"
+#include "usart.h"
+#include <string.h>
+#include <stdio.h>
+
+/* Определение констант */
+#define SOF_BYTE            0xAA    // Маркер начала фрейма
+#define EOF_BYTE            0x55    // Маркер конца фрейма
+#define MAX_PAYLOAD_SIZE    1024    // Максимальный размер полезной нагрузки
+
+/* Базовая структура фрейма */
+typedef struct {
+    uint16_t length;                        // Длина полезной нагрузки
+    uint16_t sequence;                      // Порядковый номер для защиты от Replay-атак
+    uint8_t payload[MAX_PAYLOAD_SIZE];      // Буфер для полезной нагрузки
+    uint32_t crc;                           // CRC32
+} SecureUartFrame;
+
+/* Состояния конечного автомата приемника */
+typedef enum {
+    WAIT_SOF,               // Ожидание байта начала фрейма
+    RECEIVE_LENGTH_MSB,     // Прием старшего байта длины
+    RECEIVE_LENGTH_LSB,     // Прием младшего байта длины
+    RECEIVE_SEQ_MSB,        // Прием старшего байта порядкового номера
+    RECEIVE_SEQ_LSB,        // Прием младшего байта порядкового номера
+    RECEIVE_PAYLOAD,        // Прием полезной нагрузки
+    RECEIVE_CRC_3,          // Прием 3-го байта CRC
+    RECEIVE_CRC_2,          // Прием 2-го байта CRC
+    RECEIVE_CRC_1,          // Прием 1-го байта CRC
+    RECEIVE_CRC_0,          // Прием 0-го байта CRC
+    WAIT_EOF                // Ожидание байта конца фрейма
+} ReceiverState;
+
+/* Структура для состояния приемника */
+typedef struct {
+    ReceiverState state;                    // Текущее состояние приемника
+    SecureUartFrame frame;                  // Принимаемый фрейм
+    uint16_t payloadIndex;                  // Индекс для приема payload
+    uint32_t receivedCrc;                   // Принятое значение CRC
+    uint16_t lastSequence;                  // Последний принятый порядковый номер
+} UartReceiver;
+
+/* Структура для состояния передатчика */
+typedef struct {
+    uint16_t sequence;                      // Текущий порядковый номер
+} UartTransmitter;
+
+/* Функции протокола */
+
+/**
+  * @brief  Инициализация протокола
+  * @param  None
+  * @retval None
+  */
+void SUP_Init(void);
+
+/**
+  * @brief  Отправка данных по защищенному каналу
+  * @param  data: указатель на отправляемые данные
+  * @param  length: длина отправляемых данных
+  * @retval None
+  */
+void SUP_SendData(UART_HandleTypeDef *huart, uint8_t *data, uint16_t length);
+
+/**
+  * @brief  Обработка принятого байта
+  * @param  byte: принятый байт
+  * @retval 1 если фрейм полностью принят, 0 в противном случае
+  */
+uint8_t SUP_ProcessReceivedByte(UART_HandleTypeDef *huart, uint8_t byte);
+
+/**
+  * @brief  Расчет CRC32 с использованием аппаратного модуля CRC
+  * @param  data: указатель на данные
+  * @param  length: длина данных
+  * @retval Значение CRC32
+  */
+uint32_t SUP_CalculateCRC32(uint8_t *data, uint16_t length);
+
+/**
+  * @brief  Отправка отладочного сообщения через USART2
+  * @param  format: форматная строка
+  * @param  ...: аргументы
+  * @retval None
+  */
+void SUP_DebugPrint(const char *format, ...);
+
+/**
+  * @brief  Вывод буфера в HEX формате
+  * @param  buffer: указатель на буфер
+  * @param  length: длина буфера
+  * @retval None
+  */
+void SUP_PrintBufferHex(uint8_t *buffer, uint16_t length);
+
+#endif /* SECURE_UART_PROTOCOL_H */

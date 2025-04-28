@@ -1,0 +1,291 @@
+/**
+  ******************************************************************************
+  * @file    secure_uart_protocol.c
+  * @brief   Реализация защищенного протокола UART
+  ******************************************************************************
+  */
+
+#include "secure_uart_protocol.h"
+#include <stdarg.h>
+
+/* Приватные переменные */
+static UartReceiver receiver;
+static UartTransmitter transmitter;
+
+/* Буфер для формирования сообщений */
+static uint8_t txBuffer[MAX_PAYLOAD_SIZE + 10]; // +10 для заголовка, CRC и т.д.
+static uint8_t debugBuffer[256]; // Буфер для отладочных сообщений
+
+/**
+  * @brief  Инициализация протокола
+  * @param  None
+  * @retval None
+  */
+void SUP_Init(void) {
+    // Инициализация приемника
+    receiver.state = WAIT_SOF;
+    receiver.payloadIndex = 0;
+    receiver.lastSequence = 0;
+
+    // Инициализация передатчика
+    transmitter.sequence = 0;
+
+    // Включение периферии CRC
+    __HAL_RCC_CRC_CLK_ENABLE();
+
+    // Отладочное сообщение
+    SUP_DebugPrint("Инициализация протокола выполнена\r\n");
+}
+
+/**
+  * @brief  Расчет CRC32 с использованием аппаратного модуля CRC
+  * @param  data: указатель на данные
+  * @param  length: длина данных
+  * @retval Значение CRC32
+  */
+uint32_t SUP_CalculateCRC32(uint8_t *data, uint16_t length) {
+    CRC_HandleTypeDef hcrc;
+    hcrc.Instance = CRC;
+
+    // Сброс модуля CRC
+    __HAL_CRC_DR_RESET(&hcrc);
+
+    // Расчет CRC по словам (32 бита)
+    uint32_t crc = 0xFFFFFFFF; // Начальное значение
+
+    // Обработка полных 32-битных слов
+    uint32_t words = length / 4;
+    for (uint32_t i = 0; i < words; i++) {
+        uint32_t word = 0;
+        for (int j = 0; j < 4; j++) {
+            word |= (uint32_t)data[i*4 + j] << (j*8);
+        }
+        crc = HAL_CRC_Accumulate(&hcrc, &word, 1);
+    }
+
+    // Обработка оставшихся байтов
+    uint32_t remainder = length % 4;
+    if (remainder > 0) {
+        uint32_t word = 0;
+        for (uint32_t i = 0; i < remainder; i++) {
+            word |= (uint32_t)data[words*4 + i] << (i*8);
+        }
+        crc = HAL_CRC_Accumulate(&hcrc, &word, 1);
+    }
+
+    return crc;
+}
+
+/**
+  * @brief  Отправка данных по защищенному каналу
+  * @param  huart: указатель на структуру UART
+  * @param  data: указатель на отправляемые данные
+  * @param  length: длина отправляемых данных
+  * @retval None
+  */
+void SUP_SendData(UART_HandleTypeDef *huart, uint8_t *data, uint16_t length) {
+    if (length > MAX_PAYLOAD_SIZE) {
+        SUP_DebugPrint("Ошибка: превышен максимальный размер полезной нагрузки\r\n");
+        return;
+    }
+
+    // Формирование фрейма
+    uint16_t frameIndex = 0;
+
+    // SOF
+    txBuffer[frameIndex++] = SOF_BYTE;
+
+    // Length (2 байта, старший байт первый)
+    txBuffer[frameIndex++] = (length >> 8) & 0xFF;
+    txBuffer[frameIndex++] = length & 0xFF;
+
+    // Sequence (2 байта, старший байт первый)
+    txBuffer[frameIndex++] = (transmitter.sequence >> 8) & 0xFF;
+    txBuffer[frameIndex++] = transmitter.sequence & 0xFF;
+
+    // Payload
+    memcpy(&txBuffer[frameIndex], data, length);
+    frameIndex += length;
+
+    // CRC32
+    uint32_t crc = SUP_CalculateCRC32(data, length);
+    txBuffer[frameIndex++] = (crc >> 24) & 0xFF;
+    txBuffer[frameIndex++] = (crc >> 16) & 0xFF;
+    txBuffer[frameIndex++] = (crc >> 8) & 0xFF;
+    txBuffer[frameIndex++] = crc & 0xFF;
+
+    // EOF
+    txBuffer[frameIndex++] = EOF_BYTE;
+
+    // Передача данных
+    HAL_UART_Transmit(huart, txBuffer, frameIndex, HAL_MAX_DELAY);
+
+    // Отладочное сообщение
+    SUP_DebugPrint("Отправлен фрейм (seq: %u, len: %u):\r\n", transmitter.sequence, length);
+    SUP_PrintBufferHex(txBuffer, frameIndex);
+
+    // Увеличение счетчика последовательности
+    transmitter.sequence++;
+}
+
+/**
+  * @brief  Обработка принятого байта
+  * @param  huart: указатель на структуру UART
+  * @param  byte: принятый байт
+  * @retval 1 если фрейм полностью принят, 0 в противном случае
+  */
+uint8_t SUP_ProcessReceivedByte(UART_HandleTypeDef *huart, uint8_t byte) {
+    static uint8_t receivedFrame[MAX_PAYLOAD_SIZE + 10]; // Буфер для принятого фрейма
+    static uint16_t frameIndex = 0; // Индекс в буфере принятого фрейма
+
+    // Сохраняем принятый байт для отладки
+    if (frameIndex < sizeof(receivedFrame)) {
+        receivedFrame[frameIndex++] = byte;
+    }
+
+    switch (receiver.state) {
+        case WAIT_SOF:
+            if (byte == SOF_BYTE) {
+                receiver.state = RECEIVE_LENGTH_MSB;
+                frameIndex = 1; // Сохраняем SOF как первый байт
+            }
+            break;
+
+        case RECEIVE_LENGTH_MSB:
+            receiver.frame.length = byte << 8;
+            receiver.state = RECEIVE_LENGTH_LSB;
+            break;
+
+        case RECEIVE_LENGTH_LSB:
+            receiver.frame.length |= byte;
+            if (receiver.frame.length > MAX_PAYLOAD_SIZE) {
+                // Ошибка: длина превышает максимально допустимую
+                SUP_DebugPrint("Ошибка: принята недопустимая длина пакета (%u)\r\n", receiver.frame.length);
+                receiver.state = WAIT_SOF;
+                return 0;
+            }
+            receiver.state = RECEIVE_SEQ_MSB;
+            break;
+
+        case RECEIVE_SEQ_MSB:
+            receiver.frame.sequence = byte << 8;
+            receiver.state = RECEIVE_SEQ_LSB;
+            break;
+
+        case RECEIVE_SEQ_LSB:
+            receiver.frame.sequence |= byte;
+            receiver.payloadIndex = 0;
+            if (receiver.frame.length > 0) {
+                receiver.state = RECEIVE_PAYLOAD;
+            } else {
+                receiver.state = RECEIVE_CRC_3;
+            }
+            break;
+
+        case RECEIVE_PAYLOAD:
+            if (receiver.payloadIndex < receiver.frame.length) {
+                receiver.frame.payload[receiver.payloadIndex++] = byte;
+                if (receiver.payloadIndex >= receiver.frame.length) {
+                    receiver.state = RECEIVE_CRC_3;
+                }
+            }
+            break;
+
+        case RECEIVE_CRC_3:
+            receiver.receivedCrc = byte << 24;
+            receiver.state = RECEIVE_CRC_2;
+            break;
+
+        case RECEIVE_CRC_2:
+            receiver.receivedCrc |= byte << 16;
+            receiver.state = RECEIVE_CRC_1;
+            break;
+
+        case RECEIVE_CRC_1:
+            receiver.receivedCrc |= byte << 8;
+            receiver.state = RECEIVE_CRC_0;
+            break;
+
+        case RECEIVE_CRC_0:
+            receiver.receivedCrc |= byte;
+            receiver.state = WAIT_EOF;
+            break;
+
+        case WAIT_EOF:
+            receiver.state = WAIT_SOF;
+            if (byte != EOF_BYTE) {
+                // Ошибка: неверный маркер конца фрейма
+                SUP_DebugPrint("Ошибка: неверный маркер конца фрейма\r\n");
+                return 0;
+            }
+
+            // Вычисление и проверка CRC
+            uint32_t calculatedCrc = SUP_CalculateCRC32(receiver.frame.payload, receiver.frame.length);
+            if (calculatedCrc != receiver.receivedCrc) {
+                // Ошибка: несовпадение CRC
+                SUP_DebugPrint("Ошибка: несовпадение CRC (получено: 0x%08X, вычислено: 0x%08X)\r\n",
+                              receiver.receivedCrc, calculatedCrc);
+                return 0;
+            }
+
+            // Проверка защиты от Replay-атак
+            if (receiver.frame.sequence <= receiver.lastSequence && receiver.lastSequence > 0) {
+                // Ошибка: устаревший порядковый номер (возможная Replay-атака)
+                SUP_DebugPrint("Возможная Replay-атака: получен устаревший порядковый номер %u (ожидался > %u)\r\n",
+                              receiver.frame.sequence, receiver.lastSequence);
+                return 0;
+            }
+
+            // Обновление последнего принятого порядкового номера
+            receiver.lastSequence = receiver.frame.sequence;
+
+            // Отладочное сообщение
+            SUP_DebugPrint("Принят фрейм (seq: %u, len: %u):\r\n", receiver.frame.sequence, receiver.frame.length);
+            SUP_PrintBufferHex(receivedFrame, frameIndex);
+
+            // Вывод данных payload
+            SUP_DebugPrint("Данные payload: ");
+            SUP_PrintBufferHex(receiver.frame.payload, receiver.frame.length);
+
+            // Успешное получение фрейма
+            return 1;
+    }
+
+    return 0;
+}
+
+/**
+  * @brief  Отправка отладочного сообщения через USART2
+  * @param  format: форматная строка
+  * @param  ...: аргументы
+  * @retval None
+  */
+void SUP_DebugPrint(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    // Форматирование строки
+    int len = vsnprintf((char*)debugBuffer, sizeof(debugBuffer), format, args);
+    if (len > 0) {
+        // Отправка отладочного сообщения через USART2
+        HAL_UART_Transmit(&huart2, debugBuffer, len, HAL_MAX_DELAY);
+    }
+
+    va_end(args);
+}
+
+/**
+  * @brief  Вывод буфера в HEX формате
+  * @param  buffer: указатель на буфер
+  * @param  length: длина буфера
+  * @retval None
+  */
+void SUP_PrintBufferHex(uint8_t *buffer, uint16_t length) {
+    for (uint16_t i = 0; i < length; i++) {
+        if (i % 16 == 0) {
+            SUP_DebugPrint("\r\n%04X: ", i);
+        }
+        SUP_DebugPrint("%02X ", buffer[i]);
+    }
+    SUP_DebugPrint("\r\n");
+}

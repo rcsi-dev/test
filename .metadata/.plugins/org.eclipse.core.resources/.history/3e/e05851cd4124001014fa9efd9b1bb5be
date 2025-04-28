@@ -1,0 +1,274 @@
+#include "secure_uart.h"
+#include <stdio.h>
+
+// Инициализация протокола
+void SecureUart_Init(SecureUartHandle *handle, UART_HandleTypeDef *tx_uart, UART_HandleTypeDef *rx_uart, UART_HandleTypeDef *debug_uart) {
+    handle->tx_uart = tx_uart;
+    handle->rx_uart = rx_uart;
+    handle->debug_uart = debug_uart;
+    handle->last_tx_seq = 0;
+    handle->last_rx_seq = 0;
+}
+
+// Расчет CRC16 (алгоритм CCITT)
+uint16_t SecureUart_CalculateCRC16(uint8_t *data, uint16_t length) {
+    uint16_t crc = 0xFFFF;
+    uint16_t i, j;
+
+    for (i = 0; i < length; i++) {
+        crc ^= data[i] << 8;
+        for (j = 0; j < 8; j++) {
+            if (crc & 0x8000) {
+                crc = (crc << 1) ^ 0x1021;
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+
+    return crc;
+}
+
+// Формирование фрейма из пакета
+uint16_t SecureUart_BuildFrame(uint8_t *frame, SecurePacket *packet) {
+    uint16_t frame_index = 0;
+    uint16_t i;
+    uint16_t crc;
+
+    // Добавляем стартовый байт
+    frame[frame_index++] = START_BYTE;
+
+    // Добавляем длину данных
+    frame[frame_index++] = packet->data_length;
+
+    // Добавляем порядковый номер (4 байта)
+    for (i = 0; i < 4; i++) {
+        uint8_t byte = (packet->sequence_number >> (24 - i * 8)) & 0xFF;
+
+        // Проверяем нужен ли байт-стаффинг
+        if (byte == START_BYTE || byte == END_BYTE || byte == ESCAPE_BYTE) {
+            frame[frame_index++] = ESCAPE_BYTE;
+        }
+
+        frame[frame_index++] = byte;
+    }
+
+    // Добавляем данные с байт-стаффингом
+    for (i = 0; i < packet->data_length; i++) {
+        uint8_t byte = packet->data[i];
+
+        // Проверяем нужен ли байт-стаффинг
+        if (byte == START_BYTE || byte == END_BYTE || byte == ESCAPE_BYTE) {
+            frame[frame_index++] = ESCAPE_BYTE;
+        }
+
+        frame[frame_index++] = byte;
+    }
+
+    // Расчет CRC16 для содержимого кроме стартового байта
+    crc = SecureUart_CalculateCRC16(&frame[1], frame_index - 1);
+
+    // Добавляем CRC (2 байта)
+    for (i = 0; i < 2; i++) {
+        uint8_t byte = (crc >> (8 - i * 8)) & 0xFF;
+
+        // Проверяем нужен ли байт-стаффинг
+        if (byte == START_BYTE || byte == END_BYTE || byte == ESCAPE_BYTE) {
+            frame[frame_index++] = ESCAPE_BYTE;
+        }
+
+        frame[frame_index++] = byte;
+    }
+
+    // Добавляем конечный байт
+    frame[frame_index++] = END_BYTE;
+
+    return frame_index;
+}
+
+// Отправка данных
+HAL_StatusTypeDef SecureUart_Send(SecureUartHandle *handle, uint8_t *data, uint8_t length) {
+    HAL_StatusTypeDef status;
+    SecurePacket packet;
+    uint8_t frame[MAX_FRAME_SIZE];
+    uint16_t frame_length;
+    char debug_msg[64];
+
+    // Заполняем структуру пакета
+    packet.sequence_number = ++handle->last_tx_seq;
+    packet.data_length = length;
+    memcpy(packet.data, data, length);
+
+    // Формируем фрейм
+    frame_length = SecureUart_BuildFrame(frame, &packet);
+
+    // Отправляем данные через UART
+    status = HAL_UART_Transmit(handle->tx_uart, frame, frame_length, 1000);
+
+    // Отладочный вывод
+    if (handle->debug_uart != NULL) {
+        snprintf(debug_msg, sizeof(debug_msg), "TX SEQ=%lu, LEN=%u: ", packet.sequence_number, length);
+        HAL_UART_Transmit(handle->debug_uart, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+        SecureUart_DebugHexDump(handle, "FRAME", frame, frame_length);
+    }
+
+    return status;
+}
+
+// Обработка принятого фрейма
+uint8_t SecureUart_ProcessFrame(SecureUartHandle *handle, uint8_t *frame, uint16_t frame_length, SecurePacket *packet) {
+    uint16_t i = 0, data_index = 0;
+    uint8_t escaped = 0;
+    uint16_t received_crc, calculated_crc;
+    uint8_t decoded_frame[MAX_FRAME_SIZE];
+    uint16_t decoded_length = 0;
+
+    // Проверяем начальный и конечный байты
+    if (frame[0] != START_BYTE || frame[frame_length - 1] != END_BYTE) {
+        return 0;
+    }
+
+    // Декодируем фрейм (удаляем байт-стаффинг)
+    for (i = 1; i < frame_length - 1; i++) {
+        if (escaped) {
+            decoded_frame[decoded_length++] = frame[i];
+            escaped = 0;
+        } else if (frame[i] == ESCAPE_BYTE) {
+            escaped = 1;
+        } else {
+            decoded_frame[decoded_length++] = frame[i];
+        }
+    }
+
+    // Получаем длину данных
+    packet->data_length = decoded_frame[0];
+
+    // Если длина некорректная, возвращаем ошибку
+    if (packet->data_length > MAX_DATA_LENGTH) {
+        return 0;
+    }
+
+    // Вычисляем требуемый минимальный размер фрейма
+    uint16_t min_frame_size = 1 + 4 + packet->data_length + 2; // длина(1) + seq_num(4) + данные + CRC(2)
+    if (decoded_length < min_frame_size) {
+        return 0;
+    }
+
+    // Получаем порядковый номер (4 байта)
+    packet->sequence_number = 0;
+    for (i = 1; i < 5; i++) {
+        packet->sequence_number = (packet->sequence_number << 8) | decoded_frame[i];
+    }
+
+    // Проверка на replay-атаку
+    if (packet->sequence_number <= handle->last_rx_seq) {
+        // Потенциальная replay-атака, отбрасываем пакет
+        return 0;
+    }
+
+    // Обновляем последний принятый порядковый номер
+    handle->last_rx_seq = packet->sequence_number;
+
+    // Копируем данные
+    for (i = 5, data_index = 0; data_index < packet->data_length; i++, data_index++) {
+        packet->data[data_index] = decoded_frame[i];
+    }
+
+    // Получаем CRC из фрейма
+    received_crc = ((uint16_t)decoded_frame[i] << 8) | decoded_frame[i + 1];
+
+    // Рассчитываем CRC для проверки
+    calculated_crc = SecureUart_CalculateCRC16(decoded_frame, i);
+
+    // Проверяем CRC
+    if (received_crc != calculated_crc) {
+        return 0;
+    }
+
+    return 1; // Фрейм успешно обработан
+}
+
+// Получение данных (ожидание и обработка входящего фрейма)
+uint8_t SecureUart_Receive(SecureUartHandle *handle, uint8_t *buffer, uint16_t buffer_size) {
+    uint8_t rx_byte;
+    uint8_t frame[MAX_FRAME_SIZE];
+    uint16_t frame_index = 0;
+    uint8_t frame_started = 0;
+    SecurePacket packet;
+    char debug_msg[64];
+
+    while (1) {
+        // Ожидаем приема байта
+        if (HAL_UART_Receive(handle->rx_uart, &rx_byte, 1, 1000) != HAL_OK) {
+            continue;
+        }
+
+        // Ищем начало фрейма
+        if (!frame_started) {
+            if (rx_byte == START_BYTE) {
+                frame_started = 1;
+                frame[frame_index++] = rx_byte;
+            }
+            continue;
+        }
+
+        // Добавляем байт в буфер фрейма
+        frame[frame_index++] = rx_byte;
+
+        // Если достигли конца фрейма
+        if (rx_byte == END_BYTE) {
+            // Обрабатываем фрейм
+            if (SecureUart_ProcessFrame(handle, frame, frame_index, &packet)) {
+                // Копируем данные в выходной буфер
+                if (packet.data_length <= buffer_size) {
+                    memcpy(buffer, packet.data, packet.data_length);
+
+                    // Отладочный вывод
+                    if (handle->debug_uart != NULL) {
+                        snprintf(debug_msg, sizeof(debug_msg), "RX SEQ=%lu, LEN=%u: ", packet.sequence_number, packet.data_length);
+                        HAL_UART_Transmit(handle->debug_uart, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+                        SecureUart_DebugHexDump(handle, "FRAME", frame, frame_index);
+                        HAL_UART_Transmit(handle->debug_uart, (uint8_t*)"\r\nPARSED: ", 10, 1000);
+                        SecureUart_DebugHexDump(handle, "", packet.data, packet.data_length);
+                    }
+
+                    return packet.data_length;
+                } else {
+                    return 0; // Буфер слишком маленький
+                }
+            }
+
+            // Сбрасываем состояние после обработки фрейма
+            frame_started = 0;
+            frame_index = 0;
+        }
+
+        // Проверка на переполнение буфера фрейма
+        if (frame_index >= MAX_FRAME_SIZE) {
+            frame_started = 0;
+            frame_index = 0;
+        }
+    }
+}
+
+// Отладочный вывод данных в hex-формате
+void SecureUart_DebugHexDump(SecureUartHandle *handle, const char *prefix, uint8_t *data, uint16_t length) {
+    uint16_t i;
+    char hex_buffer[8];
+
+    if (handle->debug_uart == NULL) {
+        return;
+    }
+
+    if (prefix && strlen(prefix) > 0) {
+        HAL_UART_Transmit(handle->debug_uart, (uint8_t*)prefix, strlen(prefix), 1000);
+        HAL_UART_Transmit(handle->debug_uart, (uint8_t*)": ", 2, 1000);
+    }
+
+    for (i = 0; i < length; i++) {
+        snprintf(hex_buffer, sizeof(hex_buffer), "%02X ", data[i]);
+        HAL_UART_Transmit(handle->debug_uart, (uint8_t*)hex_buffer, 3, 1000);
+    }
+
+    HAL_UART_Transmit(handle->debug_uart, (uint8_t*)"\r\n", 2, 1000);
+}

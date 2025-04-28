@@ -1,3 +1,0 @@
-../Core/Src/benchmark.c:8:6:Benchmark_Init	1
-../Core/Src/benchmark.c:22:10:Benchmark_GetCycles	1
-../Core/Src/benchmark.c:27:6:Benchmark_ReportElapsed	1

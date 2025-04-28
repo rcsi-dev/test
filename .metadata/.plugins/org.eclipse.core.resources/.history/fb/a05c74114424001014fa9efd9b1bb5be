@@ -1,0 +1,259 @@
+#include "secure_uart.h"
+
+// Глобальные переменные
+static UART_HandleTypeDef *g_huart_tx;
+static UART_HandleTypeDef *g_huart_rx;
+static UART_HandleTypeDef *g_huart_debug;
+
+static SecureUartFrame tx_frame;
+static SecureUartFrame rx_frame;
+static uint32_t current_packet_id = 0;
+static uint8_t rx_buffer[sizeof(SecureUartFrame)];
+static uint8_t rx_temp_buffer[1];
+static uint8_t rx_state = 0;
+static uint16_t rx_index = 0;
+
+// Инициализация модуля
+// Исправленная инициализация
+void SecureUart_Init(UART_HandleTypeDef *huart_tx, UART_HandleTypeDef *huart_rx, UART_HandleTypeDef *huart_debug) {
+    g_huart_tx = huart_tx;
+    g_huart_rx = huart_rx;
+    g_huart_debug = huart_debug;
+
+    // Отладочное сообщение
+    char msg[] = "Инициализация защищенного UART протокола\r\n";
+    HAL_UART_Transmit(g_huart_debug, (uint8_t *)msg, strlen(msg), 100);
+
+    // Сбрасываем состояние приема
+    rx_state = 0;
+    rx_index = 0;
+
+    // Важно: Начинаем прием первого байта в режиме IT, а не DMA
+    HAL_UART_Receive_IT(g_huart_rx, rx_temp_buffer, 1);
+
+    char msg2[] = "Ожидание начала пакета (STX)\r\n";
+    HAL_UART_Transmit(g_huart_debug, (uint8_t *)msg2, strlen(msg2), 100);
+}
+
+// Расчет CRC32
+uint32_t SecureUart_CalculateCRC(SecureUartFrame *frame) {
+    // Простая реализация через XOR всех байтов
+    // В реальном проекте нужно использовать полноценный CRC32
+    uint32_t crc = 0;
+    uint8_t *data = (uint8_t *)frame;
+
+    // Перебираем все байты кроме STX, CRC и ETX
+    for (uint16_t i = 1; i < offsetof(SecureUartFrame, crc); i++) {
+        crc ^= data[i];
+    }
+
+    return crc;
+}
+
+// Подготовка фрейма из пакета
+void SecureUart_PrepareFrame(SecurePacket *packet, SecureUartFrame *frame) {
+    frame->stx = STX;
+    frame->id = packet->id;
+    frame->len = packet->len;
+    memcpy(frame->data, packet->data, packet->len);
+    frame->crc = SecureUart_CalculateCRC(frame);
+    frame->etx = ETX;
+}
+
+// Отправка пакета
+uint8_t SecureUart_Transmit(SecurePacket *packet) {
+    // Используем глобальный счетчик для ID пакета (защита от Replay-атак)
+    packet->id = current_packet_id++;
+
+    // Подготовка фрейма
+    SecureUart_PrepareFrame(packet, &tx_frame);
+
+    // Отладочный вывод
+    SecureUart_DebugPrintFrame(&tx_frame, "TX");
+
+    // Отправка через DMA
+    uint32_t frame_size = offsetof(SecureUartFrame, data) + packet->len + sizeof(tx_frame.crc) + sizeof(tx_frame.etx);
+    return HAL_UART_Transmit_DMA(g_huart_tx, (uint8_t *)&tx_frame, frame_size);
+}
+
+// Обработка принятых данных
+void SecureUart_ProcessReceivedFrame() {
+    // Проверяем структуру фрейма
+    if (rx_frame.stx == STX && rx_frame.etx == ETX) {
+        // Проверяем CRC
+        uint32_t calculated_crc = SecureUart_CalculateCRC(&rx_frame);
+        if (calculated_crc == rx_frame.crc) {
+            // Собираем пакет
+            SecurePacket packet;
+            packet.id = rx_frame.id;
+            packet.len = rx_frame.len;
+            memcpy(packet.data, rx_frame.data, rx_frame.len);
+
+            // Отладочный вывод
+            SecureUart_DebugPrintFrame(&rx_frame, "RX");
+            SecureUart_DebugPrintPacket(&packet);
+        } else {
+            // Ошибка CRC
+            char err_msg[50];
+            sprintf(err_msg, "Ошибка CRC: получено 0x%08lX, вычислено 0x%08lX\r\n", rx_frame.crc, calculated_crc);
+            HAL_UART_Transmit(g_huart_debug, (uint8_t *)err_msg, strlen(err_msg), 100);
+        }
+    }
+
+    // Сбрасываем состояние для приема нового пакета
+    rx_state = 0;
+    rx_index = 0;
+
+    // Начинаем прием первого байта для поиска STX
+    HAL_UART_Receive_DMA(g_huart_rx, rx_temp_buffer, 1);
+}
+
+// Прием пакета
+uint8_t SecureUart_Receive(SecurePacket *packet) {
+    // Прием происходит по прерываниям и DMA
+    return HAL_OK;
+}
+
+// Отладочный вывод фрейма
+void SecureUart_DebugPrintFrame(SecureUartFrame *frame, const char *prefix) {
+    char buffer[1024];
+    int offset = 0;
+
+    // Формируем начало сообщения
+    offset += sprintf(buffer + offset, "%s: [", prefix);
+
+    // STX
+    offset += sprintf(buffer + offset, "STX:0x%02X ", frame->stx);
+
+    // ID
+    offset += sprintf(buffer + offset, "ID:0x%08lX ", frame->id);
+
+    // LEN
+    offset += sprintf(buffer + offset, "LEN:0x%04X ", frame->len);
+
+    // DATA
+    offset += sprintf(buffer + offset, "DATA:");
+    for (uint16_t i = 0; i < frame->len; i++) {
+        offset += sprintf(buffer + offset, "%02X", frame->data[i]);
+    }
+    offset += sprintf(buffer + offset, " ");
+
+    // CRC
+    offset += sprintf(buffer + offset, "CRC:0x%08lX ", frame->crc);
+
+    // ETX
+    offset += sprintf(buffer + offset, "ETX:0x%02X", frame->etx);
+
+    offset += sprintf(buffer + offset, "]\r\n");
+
+    // Отправляем на отладочный UART
+    HAL_UART_Transmit(g_huart_debug, (uint8_t *)buffer, offset, 100);
+}
+
+// Отладочный вывод пакета
+void SecureUart_DebugPrintPacket(SecurePacket *packet) {
+    char buffer[1024];
+    int offset = 0;
+
+    // Формируем сообщение
+    offset += sprintf(buffer + offset, "PARSED: [ID:0x%08lX LEN:0x%04X DATA:", packet->id, packet->len);
+
+    // Выводим данные в HEX и ASCII
+    for (uint16_t i = 0; i < packet->len; i++) {
+        offset += sprintf(buffer + offset, "%02X", packet->data[i]);
+    }
+
+    offset += sprintf(buffer + offset, " ASCII:");
+    for (uint16_t i = 0; i < packet->len; i++) {
+        char c = packet->data[i];
+        if (c >= 32 && c <= 126) {
+            offset += sprintf(buffer + offset, "%c", c);
+        } else {
+            offset += sprintf(buffer + offset, ".");
+        }
+    }
+
+    offset += sprintf(buffer + offset, "]\r\n");
+
+    // Отправляем на отладочный UART
+    HAL_UART_Transmit(g_huart_debug, (uint8_t *)buffer, offset, 100);
+}
+
+// Обработчик завершения передачи
+void SecureUart_TxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart == g_huart_tx) {
+        // Оповещение о завершении передачи
+        char msg[] = "Передача завершена\r\n";
+        HAL_UART_Transmit(g_huart_debug, (uint8_t *)msg, strlen(msg), 100);
+    }
+}
+
+// Обработчик приема по DMA
+void SecureUart_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart == g_huart_rx) {
+        // Автомат состояний для сборки фрейма
+        switch (rx_state) {
+            case 0: // Ожидаем STX
+                if (rx_temp_buffer[0] == STX) {
+                    rx_buffer[rx_index++] = rx_temp_buffer[0];
+                    rx_state = 1;
+                    // Начинаем прием ID (4 байта)
+                    HAL_UART_Receive_DMA(g_huart_rx, &rx_buffer[rx_index], 4);
+                } else {
+                    // Продолжаем ждать STX
+                    HAL_UART_Receive_DMA(g_huart_rx, rx_temp_buffer, 1);
+                }
+                break;
+
+            case 1: // Получили ID
+                rx_index += 4;
+                rx_state = 2;
+                // Начинаем прием LEN (2 байта)
+                HAL_UART_Receive_DMA(g_huart_rx, &rx_buffer[rx_index], 2);
+                break;
+
+            case 2: // Получили LEN
+                rx_index += 2;
+                rx_state = 3;
+                // Извлекаем длину данных
+                uint16_t data_len;
+                memcpy(&data_len, &rx_buffer[5], 2); // 5 = STX(1) + ID(4)
+                // Начинаем прием DATA
+                HAL_UART_Receive_DMA(g_huart_rx, &rx_buffer[rx_index], data_len);
+                break;
+
+            case 3: // Получили DATA
+                {
+                    uint16_t data_len;
+                    memcpy(&data_len, &rx_buffer[5], 2);
+                    rx_index += data_len;
+                    rx_state = 4;
+                    // Начинаем прием CRC (4 байта)
+                    HAL_UART_Receive_DMA(g_huart_rx, &rx_buffer[rx_index], 4);
+                }
+                break;
+
+            case 4: // Получили CRC
+                rx_index += 4;
+                rx_state = 5;
+                // Начинаем прием ETX (1 байт)
+                HAL_UART_Receive_DMA(g_huart_rx, &rx_buffer[rx_index], 1);
+                break;
+
+            case 5: // Получили ETX
+                rx_index += 1;
+                // Копируем данные в структуру фрейма
+                memcpy(&rx_frame, rx_buffer, rx_index);
+                // Обрабатываем полученный фрейм
+                SecureUart_ProcessReceivedFrame();
+                break;
+
+            default:
+                rx_state = 0;
+                rx_index = 0;
+                // Начинаем прием первого байта для поиска STX
+                HAL_UART_Receive_DMA(g_huart_rx, rx_temp_buffer, 1);
+                break;
+        }
+    }
+}

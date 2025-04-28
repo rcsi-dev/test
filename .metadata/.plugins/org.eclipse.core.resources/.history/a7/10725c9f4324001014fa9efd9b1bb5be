@@ -1,0 +1,47 @@
+#ifndef SECURE_UART_H
+#define SECURE_UART_H
+
+#include "main.h"
+#include <stdint.h>
+#include <string.h>
+
+// Определения констант
+#define STX 0x02
+#define ETX 0x03
+#define MAX_DATA_SIZE 1024  // Максимальный размер данных
+
+// Структура пакета
+typedef struct {
+    uint32_t id;            // ID пакета
+    uint16_t len;           // Длина данных
+    uint8_t data[MAX_DATA_SIZE]; // Данные
+} SecurePacket;
+
+// Структура для передачи по UART
+typedef struct {
+    uint8_t stx;            // Начало пакета
+    uint32_t id;            // ID пакета
+    uint16_t len;           // Длина данных
+    uint8_t data[MAX_DATA_SIZE]; // Данные
+    uint32_t crc;           // Контрольная сумма
+    uint8_t etx;            // Конец пакета
+} SecureUartFrame;
+
+// Инициализация
+void SecureUart_Init(UART_HandleTypeDef *huart_tx, UART_HandleTypeDef *huart_rx, UART_HandleTypeDef *huart_debug);
+
+// Функции для работы с пакетами
+void SecureUart_PrepareFrame(SecurePacket *packet, SecureUartFrame *frame);
+uint32_t SecureUart_CalculateCRC(SecureUartFrame *frame);
+uint8_t SecureUart_Transmit(SecurePacket *packet);
+uint8_t SecureUart_Receive(SecurePacket *packet);
+
+// Функции отладки
+void SecureUart_DebugPrintFrame(SecureUartFrame *frame, const char *prefix);
+void SecureUart_DebugPrintPacket(SecurePacket *packet);
+
+// Обработчики прерываний
+void SecureUart_TxCpltCallback(UART_HandleTypeDef *huart);
+void SecureUart_RxCpltCallback(UART_HandleTypeDef *huart);
+
+#endif /* SECURE_UART_H */

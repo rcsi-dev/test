@@ -1,0 +1,241 @@
+/**
+  ******************************************************************************
+  * @file           : packet.c
+  * @brief          : Модуль работы с пакетами данных
+  ******************************************************************************
+  */
+
+/* Includes ------------------------------------------------------------------*/
+#include "packet.h"
+#include <string.h>
+
+/* Private function prototypes -----------------------------------------------*/
+static uint16_t calculate_simple_crc(const uint8_t *data, uint16_t length);
+
+/* Functions -----------------------------------------------------------------*/
+
+/**
+ * @brief  Инициализация парсера пакетов
+ * @param  parser Указатель на структуру парсера
+ * @retval None
+ */
+void Packet_InitParser(PacketParser *parser) {
+    // Очистка структуры парсера
+    memset(parser, 0, sizeof(PacketParser));
+    // Установка начального состояния
+    parser->state = PACKET_STATE_IDLE;
+}
+
+/**
+ * @brief  Создание нового пакета
+ * @param  packet Указатель на структуру пакета
+ * @param  packet_type Тип пакета
+ * @param  packet_id Идентификатор пакета
+ * @param  data Указатель на данные
+ * @param  data_length Длина данных
+ * @retval None
+ */
+void Packet_Create(Packet *packet, PacketType packet_type, uint8_t packet_id,
+                   const uint8_t *data, uint8_t data_length) {
+    // Проверка размера данных
+    if (data_length > PACKET_MAX_DATA_SIZE) {
+        data_length = PACKET_MAX_DATA_SIZE;
+    }
+
+    // Заполнение заголовка
+    packet->header.start_marker = PACKET_START_MARKER;
+    packet->header.packet_id = packet_id;
+    packet->header.packet_type = (uint8_t)packet_type;
+    packet->header.data_length = data_length;
+
+    // Копирование данных
+    memcpy(packet->data, data, data_length);
+
+    // Установка маркера конца пакета
+    packet->end_marker = PACKET_END_MARKER;
+
+    // Расчет CRC (в будущем будет использоваться аппаратный CRC32)
+    packet->crc = calculate_simple_crc(packet->data, data_length);
+}
+
+/**
+ * @brief  Сериализация пакета в буфер для отправки
+ * @param  packet Указатель на структуру пакета
+ * @param  buffer Буфер для сериализованных данных
+ * @param  buffer_size Размер буфера
+ * @retval Размер сериализованных данных или 0 в случае ошибки
+ */
+uint16_t Packet_Serialize(const Packet *packet, uint8_t *buffer, uint16_t buffer_size) {
+    uint16_t total_size = PACKET_HEADER_SIZE + packet->header.data_length + PACKET_FOOTER_SIZE;
+
+    // Проверка размера буфера
+    if (buffer_size < total_size) {
+        return 0; // Буфер слишком мал
+    }
+
+    // Копирование заголовка
+    buffer[0] = packet->header.start_marker;
+    buffer[1] = packet->header.packet_id;
+    buffer[2] = packet->header.packet_type;
+    buffer[3] = packet->header.data_length;
+
+    // Копирование данных
+    memcpy(&buffer[PACKET_HEADER_SIZE], packet->data, packet->header.data_length);
+
+    // Копирование CRC
+    buffer[PACKET_HEADER_SIZE + packet->header.data_length] = (uint8_t)(packet->crc & 0xFF);
+    buffer[PACKET_HEADER_SIZE + packet->header.data_length + 1] = (uint8_t)((packet->crc >> 8) & 0xFF);
+
+    // Копирование маркера конца пакета
+    buffer[total_size - 1] = packet->end_marker;
+
+    return total_size;
+}
+
+/**
+ * @brief  Обработка входящего байта и построение пакета
+ * @param  parser Указатель на структуру парсера
+ * @param  byte Входящий байт данных
+ * @retval 1 если пакет полностью собран, 0 в противном случае
+ */
+uint8_t Packet_ParseByte(PacketParser *parser, uint8_t byte) {
+    uint8_t packet_complete = 0;
+
+    switch (parser->state) {
+        // Ожидание маркера начала пакета
+        case PACKET_STATE_IDLE:
+            if (byte == PACKET_START_MARKER) {
+                // Сбрасываем парсер и сохраняем первый байт заголовка
+                memset(&parser->current_packet, 0, sizeof(Packet));
+                parser->current_packet.header.start_marker = byte;
+                parser->header_index = 1;
+                parser->state = PACKET_STATE_HEADER;
+            }
+            break;
+
+        // Прием заголовка пакета
+        case PACKET_STATE_HEADER:
+            // Обработка байтов заголовка
+            switch (parser->header_index) {
+                case 1: // packet_id
+                    parser->current_packet.header.packet_id = byte;
+                    break;
+                case 2: // packet_type
+                    parser->current_packet.header.packet_type = byte;
+                    break;
+                case 3: // data_length
+                    parser->current_packet.header.data_length = byte;
+                    if (byte > PACKET_MAX_DATA_SIZE) {
+                        // Ошибка в размере данных, сбрасываем парсер
+                        parser->state = PACKET_STATE_IDLE;
+                        return 0;
+                    }
+                    break;
+            }
+
+            parser->header_index++;
+
+            // Если заголовок полностью получен, переходим к данным
+            if (parser->header_index >= PACKET_HEADER_SIZE) {
+                parser->data_index = 0;
+
+                // Если длина данных равна 0, переходим к CRC
+                if (parser->current_packet.header.data_length == 0) {
+                    parser->state = PACKET_STATE_CRC;
+                    parser->crc_index = 0;
+                } else {
+                    parser->state = PACKET_STATE_DATA;
+                }
+            }
+            break;
+
+        // Прием данных пакета
+        case PACKET_STATE_DATA:
+            // Сохраняем байт данных
+            if (parser->data_index < parser->current_packet.header.data_length) {
+                parser->current_packet.data[parser->data_index++] = byte;
+            }
+
+            // Если все данные получены, переходим к CRC
+            if (parser->data_index >= parser->current_packet.header.data_length) {
+                parser->state = PACKET_STATE_CRC;
+                parser->crc_index = 0;
+            }
+            break;
+
+        // Прием CRC
+        case PACKET_STATE_CRC:
+            if (parser->crc_index == 0) {
+                // Младший байт CRC
+                parser->current_packet.crc = byte;
+            } else {
+                // Старший байт CRC
+                parser->current_packet.crc |= ((uint16_t)byte << 8);
+            }
+
+            parser->crc_index++;
+
+            // Если оба байта CRC получены, переходим к маркеру конца
+            if (parser->crc_index >= 2) {
+                parser->state = PACKET_STATE_END;
+            }
+            break;
+
+        // Ожидание маркера конца пакета
+        case PACKET_STATE_END:
+            if (byte == PACKET_END_MARKER) {
+                // Пакет полностью получен
+                parser->current_packet.end_marker = byte;
+
+                // Проверка CRC
+                uint16_t calculated_crc = calculate_simple_crc(
+                    parser->current_packet.data,
+                    parser->current_packet.header.data_length
+                );
+
+                if (calculated_crc == parser->current_packet.crc) {
+                    packet_complete = 1; // Пакет корректен
+                }
+            }
+
+            // Сбрасываем состояние парсера
+            parser->state = PACKET_STATE_IDLE;
+            break;
+    }
+
+    return packet_complete;
+}
+
+/**
+ * @brief  Расчет CRC для данных пакета (простая реализация)
+ * @param  data Указатель на данные
+ * @param  length Длина данных
+ * @retval Значение CRC
+ */
+uint16_t Packet_CalculateCRC(const uint8_t *data, uint16_t length) {
+    return calculate_simple_crc(data, length);
+}
+
+/**
+ * @brief  Простая реализация расчета CRC (в дальнейшем будет заменена на аппаратный CRC32)
+ * @param  data Указатель на данные
+ * @param  length Длина данных
+ * @retval Значение CRC
+ */
+static uint16_t calculate_simple_crc(const uint8_t *data, uint16_t length) {
+    uint16_t crc = 0xFFFF;
+
+    for (uint16_t i = 0; i < length; i++) {
+        crc ^= data[i];
+
+        for (uint8_t j = 0; j < 8; j++) {
+            if (crc & 0x0001) {
+                crc = (crc >> 1) ^ 0xA001;
+            } else {
+                crc = crc >> 1;
+            }
+        }
+    }
+
+    return crc;
+}

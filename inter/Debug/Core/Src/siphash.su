@@ -1,0 +1,2 @@
+../Core/Src/siphash.c:45:10:SipHash_2_4	1056	static
+../Core/Src/siphash.c:110:6:SipHash_2_4_MAC	32	static

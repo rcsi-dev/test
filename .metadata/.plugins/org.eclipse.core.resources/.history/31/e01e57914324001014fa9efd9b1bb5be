@@ -1,0 +1,369 @@
+/**
+ * @file secure_uart.c
+ * @brief Реализация защищенного протокола UART
+ */
+
+#include "secure_uart.h"
+#include <stdarg.h>
+
+/* Таблица для быстрого подсчета CRC32 */
+static const uint32_t crc32_table[256] = {
+    0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3,
+    0x0EDB8832, 0x79DCB8A4, 0xE0D5E91E, 0x97D2D988, 0x09B64C2B, 0x7EB17CBD, 0xE7B82D07, 0x90BF1D91,
+    0x1DB71064, 0x6AB020F2, 0xF3B97148, 0x84BE41DE, 0x1ADAD47D, 0x6DDDE4EB, 0xF4D4B551, 0x83D385C7,
+    0x136C9856, 0x646BA8C0, 0xFD62F97A, 0x8A65C9EC, 0x14015C4F, 0x63066CD9, 0xFA0F3D63, 0x8D080DF5,
+    /* ... сокращено для краткости ... */
+    0x6A267E96, 0xBA7C9045, 0xF12C7F99, 0x24A19947, 0xB3916CF7, 0x0801F2E2, 0x858EFC16, 0x636920D8,
+    0x71574E69, 0xA458FEA3, 0xF4933D7E, 0x0D95748F, 0x728EB658, 0x718BCD58, 0x82154AEE, 0x7B54A41D,
+    0xC25A59B5, 0x9C30D539, 0x2AF26013, 0xC5D1B023, 0x286085F0, 0xCA417918, 0xB8DB38EF, 0x8E79DCB0,
+    0x603A180E, 0x6C9E0E8B, 0xB01E8A3E, 0xD71577C1, 0xBD314B27, 0x78AF2FDA, 0x55605C60, 0xE65525F3
+};
+
+/**
+ * @brief Инициализация контекста протокола
+ */
+HAL_StatusTypeDef SecureUart_Init(SecureUartContext* ctx,
+                                 UART_HandleTypeDef* uartTx,
+                                 UART_HandleTypeDef* uartRx,
+                                 UART_HandleTypeDef* uartDebug,
+                                 uint8_t localAddress) {
+    if (ctx == NULL || uartTx == NULL || uartRx == NULL) {
+        return HAL_ERROR;
+    }
+
+    // Инициализация полей контекста
+    ctx->uartTx = uartTx;
+    ctx->uartRx = uartRx;
+    ctx->uartDebug = uartDebug;
+    ctx->localAddress = localAddress;
+    ctx->txSequence = 0;
+    ctx->rxLastSequence = 0;
+
+    // Инициализация парсера
+    ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+    ctx->parser.headerBytesReceived = 0;
+    ctx->parser.dataBytesReceived = 0;
+    ctx->parser.footerBytesReceived = 0;
+    ctx->parser.rawBufferIndex = 0;
+
+    SecureUart_Debug(ctx, "Защищенный UART инициализирован, локальный адрес: 0x%02X\r\n", localAddress);
+
+    return HAL_OK;
+}
+
+/**
+ * @brief Запуск приема данных по UART в режиме DMA
+ */
+HAL_StatusTypeDef SecureUart_StartReceive(SecureUartContext* ctx) {
+    if (ctx == NULL) {
+        return HAL_ERROR;
+    }
+
+    // Запускаем прием в циклическом режиме DMA (по одному байту)
+    if (HAL_UART_Receive_DMA(ctx->uartRx, ctx->rxBuffer, 1) != HAL_OK) {
+        SecureUart_Debug(ctx, "Ошибка запуска приема по DMA\r\n");
+        return HAL_ERROR;
+    }
+
+    // Включаем прерывание по половине заполнения буфера DMA и по его заполнении
+    __HAL_UART_ENABLE_IT(ctx->uartRx, UART_IT_IDLE);
+
+    SecureUart_Debug(ctx, "Прием по DMA запущен\r\n");
+    return HAL_OK;
+}
+
+/**
+ * @brief Обработка принятого байта
+ */
+uint8_t SecureUart_ProcessByte(SecureUartContext* ctx, uint8_t byte) {
+    if (ctx == NULL) {
+        return 0;
+    }
+
+    // Сохраняем байт в сыром буфере для отладки
+    if (ctx->parser.rawBufferIndex < SECURE_UART_MAX_FRAME_SIZE) {
+        ctx->parser.rawBuffer[ctx->parser.rawBufferIndex++] = byte;
+    }
+
+    // Конечный автомат парсера
+    switch (ctx->parser.state) {
+        case SECURE_UART_STATE_WAIT_SOF_1:
+            if (byte == (SECURE_UART_SOF & 0xFF)) {
+                ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_2;
+            }
+            break;
+
+        case SECURE_UART_STATE_WAIT_SOF_2:
+            if (byte == ((SECURE_UART_SOF >> 8) & 0xFF)) {
+                ctx->parser.state = SECURE_UART_STATE_RECEIVE_HEADER;
+                // Сохраняем SOF в заголовке
+                ctx->parser.frame.header.sof = SECURE_UART_SOF;
+                ctx->parser.headerBytesReceived = 2; // SOF уже получен
+            } else {
+                // Возвращаемся к ожиданию SOF_1
+                ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+            }
+            break;
+
+        case SECURE_UART_STATE_RECEIVE_HEADER:
+            // Получаем остальные байты заголовка
+            ((uint8_t*)&ctx->parser.frame.header)[ctx->parser.headerBytesReceived++] = byte;
+
+            // Проверяем, получен ли весь заголовок
+            if (ctx->parser.headerBytesReceived >= sizeof(SecureUartHeader)) {
+                // Проверка валидности заголовка
+                if (ctx->parser.frame.header.len > SECURE_UART_MAX_DATA_SIZE) {
+                    // Некорректная длина данных
+                    SecureUart_Debug(ctx, "Ошибка: некорректная длина данных %d\r\n",
+                                    ctx->parser.frame.header.len);
+                    ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+                    ctx->parser.headerBytesReceived = 0;
+                    ctx->parser.rawBufferIndex = 0;
+                } else {
+                    // Начинаем принимать данные
+                    ctx->parser.state = SECURE_UART_STATE_RECEIVE_DATA;
+                    ctx->parser.dataBytesReceived = 0;
+                }
+            }
+            break;
+
+        case SECURE_UART_STATE_RECEIVE_DATA:
+            // Получаем байты данных
+            ctx->parser.frame.data[ctx->parser.dataBytesReceived++] = byte;
+
+            // Проверяем, получены ли все данные
+            if (ctx->parser.dataBytesReceived >= ctx->parser.frame.header.len) {
+                // Переходим к получению футера
+                ctx->parser.state = SECURE_UART_STATE_RECEIVE_FOOTER;
+                ctx->parser.footerBytesReceived = 0;
+            }
+            break;
+
+        case SECURE_UART_STATE_RECEIVE_FOOTER:
+            // Получаем байты футера
+            ((uint8_t*)&ctx->parser.frame.footer)[ctx->parser.footerBytesReceived++] = byte;
+
+            // Проверяем, получен ли весь футер
+            if (ctx->parser.footerBytesReceived >= sizeof(SecureUartFooter)) {
+                // Проверка валидности футера
+                if (ctx->parser.frame.footer.eof != SECURE_UART_EOF) {
+                    // Некорректный EOF
+                    SecureUart_Debug(ctx, "Ошибка: некорректный EOF 0x%04X\r\n",
+                                    ctx->parser.frame.footer.eof);
+                    ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+                    ctx->parser.headerBytesReceived = 0;
+                    ctx->parser.dataBytesReceived = 0;
+                    ctx->parser.footerBytesReceived = 0;
+                    ctx->parser.rawBufferIndex = 0;
+                    return 0;
+                }
+
+                // Проверка CRC
+                uint32_t calculatedCRC = SecureUart_CalculateCRC32(
+                    (uint8_t*)&ctx->parser.frame,
+                    sizeof(SecureUartHeader) + ctx->parser.frame.header.len
+                );
+
+                if (calculatedCRC != ctx->parser.frame.footer.crc) {
+                    // Некорректная CRC
+                    SecureUart_Debug(ctx, "Ошибка: некорректная CRC, получено 0x%08X, рассчитано 0x%08X\r\n",
+                                    ctx->parser.frame.footer.crc, calculatedCRC);
+                    ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+                    ctx->parser.headerBytesReceived = 0;
+                    ctx->parser.dataBytesReceived = 0;
+                    ctx->parser.footerBytesReceived = 0;
+                    ctx->parser.rawBufferIndex = 0;
+                    return 0;
+                }
+
+                // Проверка адреса
+                if (ctx->parser.frame.header.dst != ctx->localAddress) {
+                    // Пакет не для нас
+                    SecureUart_Debug(ctx, "Пакет с адресом 0x%02X не для нас (0x%02X)\r\n",
+                                    ctx->parser.frame.header.dst, ctx->localAddress);
+                    ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+                    ctx->parser.headerBytesReceived = 0;
+                    ctx->parser.dataBytesReceived = 0;
+                    ctx->parser.footerBytesReceived = 0;
+                    ctx->parser.rawBufferIndex = 0;
+                    return 0;
+                }
+
+                // Проверка защиты от Replay-атак
+                if (ctx->parser.frame.header.seq <= ctx->rxLastSequence) {
+                    // Предотвращение Replay-атаки
+                    SecureUart_Debug(ctx, "Предотвращена Replay-атака: seq %u <= lastSeq %u\r\n",
+                                    ctx->parser.frame.header.seq, ctx->rxLastSequence);
+                    ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+                    ctx->parser.headerBytesReceived = 0;
+                    ctx->parser.dataBytesReceived = 0;
+                    ctx->parser.footerBytesReceived = 0;
+                    ctx->parser.rawBufferIndex = 0;
+                    return 0;
+                }
+
+                // Обновляем последний полученный sequence number
+                ctx->rxLastSequence = ctx->parser.frame.header.seq;
+
+                // Логируем полученный пакет
+                SecureUart_Debug(ctx, "Принят пакет от 0x%02X, seq=%u, длина=%u, данные: ",
+                                ctx->parser.frame.header.src,
+                                ctx->parser.frame.header.seq,
+                                ctx->parser.frame.header.len);
+
+                // Выводим HEX-представление фрейма
+                for (uint16_t i = 0; i < ctx->parser.rawBufferIndex; i++) {
+                    SecureUart_Debug(ctx, "%02X ", ctx->parser.rawBuffer[i]);
+                }
+
+                // Выводим данные в виде текста, если возможно
+                SecureUart_Debug(ctx, "\r\nПарсед: ");
+                for (uint16_t i = 0; i < ctx->parser.frame.header.len; i++) {
+                    if (ctx->parser.frame.data[i] >= 32 && ctx->parser.frame.data[i] <= 126) {
+                        SecureUart_Debug(ctx, "%c", ctx->parser.frame.data[i]);
+                    } else {
+                        SecureUart_Debug(ctx, ".");
+                    }
+                }
+                SecureUart_Debug(ctx, "\r\n");
+
+                // Сбрасываем состояние парсера для следующего пакета
+                ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+                ctx->parser.headerBytesReceived = 0;
+                ctx->parser.dataBytesReceived = 0;
+                ctx->parser.footerBytesReceived = 0;
+                ctx->parser.rawBufferIndex = 0;
+
+                // Возвращаем 1, сигнализируя об успешном приеме пакета
+                return 1;
+            }
+            break;
+
+        default:
+            // Некорректное состояние, сбрасываем парсер
+            ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+            ctx->parser.headerBytesReceived = 0;
+            ctx->parser.dataBytesReceived = 0;
+            ctx->parser.footerBytesReceived = 0;
+            ctx->parser.rawBufferIndex = 0;
+            break;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Отправка данных защищенным протоколом
+ */
+HAL_StatusTypeDef SecureUart_Send(SecureUartContext* ctx,
+                                 uint8_t dstAddress,
+                                 const uint8_t* data,
+                                 uint16_t length) {
+    if (ctx == NULL || data == NULL || length > SECURE_UART_MAX_DATA_SIZE) {
+        return HAL_ERROR;
+    }
+
+    // Создаем структуру фрейма
+    SecureUartFrame frame;
+
+    // Заполняем заголовок
+    frame.header.sof = SECURE_UART_SOF;
+    frame.header.dst = dstAddress;
+    frame.header.src = ctx->localAddress;
+    frame.header.seq = ++ctx->txSequence;  // Увеличиваем и используем sequence number
+    frame.header.len = length;
+
+    // Копируем данные
+    memcpy(frame.data, data, length);
+
+    // Вычисляем CRC для заголовка и данных
+    frame.footer.crc = SecureUart_CalculateCRC32((uint8_t*)&frame, sizeof(SecureUartHeader) + length);
+    frame.footer.eof = SECURE_UART_EOF;
+
+    // Подготавливаем буфер для отправки
+    uint16_t frameSize = sizeof(SecureUartHeader) + length + sizeof(SecureUartFooter);
+    memcpy(ctx->txBuffer, &frame, frameSize);
+
+    // Логируем отправляемый пакет
+    SecureUart_Debug(ctx, "Отправка пакета к 0x%02X, seq=%u, длина=%u, данные: ",
+                    dstAddress, ctx->txSequence, length);
+
+    // Выводим HEX-представление фрейма
+    for (uint16_t i = 0; i < frameSize; i++) {
+        SecureUart_Debug(ctx, "%02X ", ctx->txBuffer[i]);
+    }
+
+    // Выводим данные в виде текста, если возможно
+    SecureUart_Debug(ctx, "\r\nДанные: ");
+    for (uint16_t i = 0; i < length; i++) {
+        if (data[i] >= 32 && data[i] <= 126) {
+            SecureUart_Debug(ctx, "%c", data[i]);
+        } else {
+            SecureUart_Debug(ctx, ".");
+        }
+    }
+    SecureUart_Debug(ctx, "\r\n");
+
+    // Отправляем данные по UART с использованием DMA
+    return HAL_UART_Transmit_DMA(ctx->uartTx, ctx->txBuffer, frameSize);
+}
+
+/**
+ * @brief Вычисление CRC32 для данных
+ */
+uint32_t SecureUart_CalculateCRC32(const uint8_t* data, uint32_t length) {
+    uint32_t crc = 0xFFFFFFFF;
+    for (uint32_t i = 0; i < length; i++) {
+        crc = (crc >> 8) ^ crc32_table[(crc ^ data[i]) & 0xFF];
+    }
+    return ~crc;
+}
+
+/**
+ * @brief Callback-функция приема UART в режиме DMA
+ */
+void SecureUart_RxCpltCallback(SecureUartContext* ctx) {
+    if (ctx == NULL) {
+        return;
+    }
+
+    // Обрабатываем принятый байт
+    SecureUart_ProcessByte(ctx, ctx->rxBuffer[0]);
+}
+
+/**
+ * @brief Обработка IDLE состояния UART
+ */
+void SecureUart_HandleTimeout(SecureUartContext* ctx) {
+    if (ctx == NULL) {
+        return;
+    }
+
+    // Если есть накопленные данные, но прием прервался, сбрасываем парсер
+    if (ctx->parser.state != SECURE_UART_STATE_WAIT_SOF_1 &&
+        ctx->parser.headerBytesReceived > 0) {
+        SecureUart_Debug(ctx, "Таймаут при приеме данных, сброс парсера\r\n");
+        ctx->parser.state = SECURE_UART_STATE_WAIT_SOF_1;
+        ctx->parser.headerBytesReceived = 0;
+        ctx->parser.dataBytesReceived = 0;
+        ctx->parser.footerBytesReceived = 0;
+        ctx->parser.rawBufferIndex = 0;
+    }
+}
+
+/**
+ * @brief Отладочный вывод в консоль
+ */
+void SecureUart_Debug(SecureUartContext* ctx, const char* format, ...) {
+    if (ctx == NULL || ctx->uartDebug == NULL) {
+        return;
+    }
+
+    char buffer[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+
+    HAL_UART_Transmit(ctx->uartDebug, (uint8_t*)buffer, strlen(buffer), 100);
+}

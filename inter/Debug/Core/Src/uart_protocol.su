@@ -1,4 +1,0 @@
-../Core/Src/uart_protocol.c:9:6:UartProtocol_Init	72	static
-../Core/Src/uart_protocol.c:24:6:UartProtocol_SendFrame	416	static
-../Core/Src/uart_protocol.c:71:6:UartProtocol_ProcessRxByte	416	static
-../Core/Src/uart_protocol.c:174:10:UartProtocol_CalculateCRC	32	static
