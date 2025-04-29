@@ -54,7 +54,7 @@ uint8_t macKey[16] = {
     0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00
 };
 
-uint8_t testData[] = "Testing message";
+uint8_t testData[] = "Это тестовое сообщение для проверки защищенного UART протокола";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -85,6 +85,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 }
 
 void TestDecryption() {
+    // Тест с известными данными
+    uint8_t known_iv[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
     uint8_t known_plaintext[] = "Test message";
     uint8_t known_ciphertext[32];
     uint8_t decrypted[32];
@@ -93,10 +95,10 @@ void TestDecryption() {
     SpeckContext test_ctx;
     Speck_Init(&test_ctx, encryptionKey);
 
-    size_t enc_len = Speck_Encrypt_Simple(&test_ctx, known_plaintext, strlen((char*)known_plaintext), known_ciphertext);
+    size_t enc_len = Speck_Encrypt_Simple(&test_ctx, known_plaintext, strlen((char*)known_plaintext), known_iv, known_ciphertext);
 
     // Расшифрование
-    size_t dec_len = Speck_Decrypt_Simple(&test_ctx, known_ciphertext, enc_len, decrypted);
+    size_t dec_len = Speck_Decrypt_Simple(&test_ctx, known_ciphertext, enc_len, NULL, decrypted);
 
     // Проверка
     decrypted[dec_len] = 0; // Добавляем нулевой символ для вывода как строки
@@ -169,6 +171,7 @@ int main(void)
     SecureUart_DebugPrint(&huart2, "====================================\r\n\r\n");
 
     TestDecryption();
+
     /* USER CODE END 2 */
 
     /* Infinite loop */

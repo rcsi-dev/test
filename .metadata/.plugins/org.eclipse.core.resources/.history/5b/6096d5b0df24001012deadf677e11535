@@ -10,7 +10,7 @@
 #include <time.h>
 
 // Глобальный счетчик для последовательных номеров
-static uint32_t g_sequence_counter = 1;
+static uint32_t g_sequence_counter = 0;
 
 /**
  * @brief Инициализация контекста защищенного UART

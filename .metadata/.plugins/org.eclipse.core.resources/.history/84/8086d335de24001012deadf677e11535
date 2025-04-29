@@ -10,7 +10,9 @@
 #include <time.h>
 
 // Глобальный счетчик для последовательных номеров
-static uint32_t g_sequence_counter = 1;
+static uint32_t g_sequence_counter = 0;
+
+static const uint8_t FIXED_IV[IV_SIZE] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
 
 /**
  * @brief Инициализация контекста защищенного UART
@@ -138,7 +140,7 @@ SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, ui
     frame[frame_pos++] = PACKET_TYPE_DATA;
 
     // Буфер для зашифрованных данных
-    uint8_t encrypted_data[MAX_DATA_SIZE];
+    uint8_t encrypted_data[MAX_DATA_SIZE + IV_SIZE];
     uint8_t actual_data_length = length;
 
     // Если шифрование включено, шифруем данные
@@ -148,7 +150,7 @@ SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, ui
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Оригинал: ", data, length);
 
         // Шифрование данных (используем Simple версию)
-        size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, encrypted_data);
+        size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, FIXED_IV, encrypted_data);
 
         // Обновляем указатель на данные и длину
         data = encrypted_data;
@@ -296,9 +298,10 @@ SecureUartStatus SecureUart_ProcessReceivedData(SecureUartContext *ctx, SecureUa
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Шифротекст: ", received_data, data_length);
 
         // Используем Simple версию расшифрования
+        // Обратите внимание: передаем ноль в качестве IV, так как IV уже включен в received_data
         size_t decrypted_length = Speck_Decrypt_Simple(
             &ctx->speck_ctx,
-            received_data,  // Полные данные
+            received_data,  // Полные данные, включая IV
             data_length,    // Полная длина данных
             packet->data
         );

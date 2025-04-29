@@ -130,8 +130,11 @@ size_t Speck_GetPaddedLength(size_t length) {
 /**
  * @brief Упрощенное шифрование данных произвольной длины
  */
-size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext,
-		size_t length, uint8_t* ciphertext) {
+size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext, size_t length,
+                           const uint8_t* iv, uint8_t* ciphertext) {
+    // Копируем IV в начало шифротекста
+    memcpy(ciphertext, iv, SPECK_BLOCK_SIZE);
+
     size_t padded_length = Speck_GetPaddedLength(length);
     uint8_t padded_data[256]; // Буфер для данных с паддингом
 
@@ -154,8 +157,8 @@ size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext,
 /**
  * @brief Упрощенное расшифрование данных произвольной длины
  */
-size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext,
-		size_t length, uint8_t* plaintext) {
+size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext, size_t length,
+                           const uint8_t* iv, uint8_t* plaintext) {
     if (length <= SPECK_BLOCK_SIZE) return 0; // Некорректная длина
 
     // Расшифровываем блоки

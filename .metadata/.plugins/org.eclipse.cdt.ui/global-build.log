@@ -1,442 +1,122 @@
-18:51:35 **** Incremental Build of configuration Debug for project inter ****
+12:41:01 **** Incremental Build of configuration Debug for project inter ****
 make -j8 all 
 arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
-../Core/Src/secure_uart.c: In function 'SecureUart_PrintHexBuffer':
-../Core/Src/secure_uart.c:411:8: error: expected expression before 'uint32_t'
-  411 | static uint32_t g_sequence_counter = 0;
-      |        ^~~~~~~~
-../Core/Src/secure_uart.c:686:1: error: expected declaration or statement at end of input
-  686 | }
-      | ^
+arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
+../Core/Src/speck.c:133:8: error: conflicting types for 'Speck_Encrypt_Simple'; have 'size_t(const SpeckContext *, const uint8_t *, size_t,  uint8_t *)' {aka 'unsigned int(const SpeckContext *, const unsigned char *, unsigned int,  unsigned char *)'}
+  133 | size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext,
+      |        ^~~~~~~~~~~~~~~~~~~~
+In file included from ../Core/Src/speck.c:6:
+../Core/Inc/speck.h:53:8: note: previous declaration of 'Speck_Encrypt_Simple' with type 'size_t(const SpeckContext *, const uint8_t *, size_t,  const uint8_t *, uint8_t *)' {aka 'unsigned int(const SpeckContext *, const unsigned char *, unsigned int,  const unsigned char *, unsigned char *)'}
+   53 | size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext, size_t length,
+      |        ^~~~~~~~~~~~~~~~~~~~
+../Core/Src/speck.c:157:8: error: conflicting types for 'Speck_Decrypt_Simple'; have 'size_t(const SpeckContext *, const uint8_t *, size_t,  uint8_t *)' {aka 'unsigned int(const SpeckContext *, const unsigned char *, unsigned int,  unsigned char *)'}
+  157 | size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext,
+      |        ^~~~~~~~~~~~~~~~~~~~
+../Core/Inc/speck.h:66:8: note: previous declaration of 'Speck_Decrypt_Simple' with type 'size_t(const SpeckContext *, const uint8_t *, size_t,  const uint8_t *, uint8_t *)' {aka 'unsigned int(const SpeckContext *, const unsigned char *, unsigned int,  const unsigned char *, unsigned char *)'}
+   66 | size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext, size_t length,
+      |        ^~~~~~~~~~~~~~~~~~~~
+make: *** [Core/Src/subdir.mk:43: Core/Src/speck.o] Error 1
+make: *** Waiting for unfinished jobs....
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:302:35: error: too few arguments to function 'Speck_Decrypt_Simple'
+  302 |         size_t decrypted_length = Speck_Decrypt_Simple(
+      |                                   ^~~~~~~~~~~~~~~~~~~~
+In file included from ../Core/Inc/secure_uart.h:13,
+                 from ../Core/Src/secure_uart.c:6:
+../Core/Inc/speck.h:66:8: note: declared here
+   66 | size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext, size_t length,
+      |        ^~~~~~~~~~~~~~~~~~~~
 make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
 "make -j8 all" terminated with exit code 2. Build might be incomplete.
-18:53:28 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.o: in function `HAL_UART_IRQHandler':
-D:/diploma/inter/Debug/../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c:2351: multiple definition of `HAL_UART_IRQHandler'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:78: first defined here
-collect2.exe: error: ld returned 1 exit status
-make: *** [makefile:64: inter.elf] Error 1
-"make -j8 all" terminated with exit code 2. Build might be incomplete.
-18:53:57 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  27976	    252	   3100	  31328	   7a60	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-18:54:00 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-size  inter.elf 
-   text	   data	    bss	    dec	    hex	filename
-  27976	    252	   3100	  31328	   7a60	inter.elf
-Finished building: default.size.stdout
- 
-19:00:40 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28244	    252	   3100	  31596	   7b6c	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:00:42 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-size  inter.elf 
-   text	   data	    bss	    dec	    hex	filename
-  28244	    252	   3100	  31596	   7b6c	inter.elf
-Finished building: default.size.stdout
- 
-19:03:29 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28112	    252	   3100	  31464	   7ae8	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:03:32 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-size  inter.elf 
-   text	   data	    bss	    dec	    hex	filename
-  28112	    252	   3100	  31464	   7ae8	inter.elf
-Finished building: default.size.stdout
- 
-19:05:14 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-../Core/Src/speck.c: In function 'Speck_CBC_Decrypt':
-../Core/Src/speck.c:208:9: warning: implicit declaration of function 'printf' [-Wimplicit-function-declaration]
-  208 |         printf("Расшифрованные данные до удаления паддинга: ");
-      |         ^~~~~~
-../Core/Src/speck.c:8:1: note: include '<stdio.h>' or provide a declaration of 'printf'
-    7 | #include <string.h>
-  +++ |+#include <stdio.h>
-    8 | 
-../Core/Src/speck.c:208:9: warning: incompatible implicit declaration of built-in function 'printf' [-Wbuiltin-declaration-mismatch]
-  208 |         printf("Расшифрованные данные до удаления паддинга: ");
-      |         ^~~~~~
-../Core/Src/speck.c:208:9: note: include '<stdio.h>' or provide a declaration of 'printf'
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28420	    252	   3100	  31772	   7c1c	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:05:20 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-size  inter.elf 
-   text	   data	    bss	    dec	    hex	filename
-  28420	    252	   3100	  31772	   7c1c	inter.elf
-Finished building: default.size.stdout
- 
-19:07:11 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-../Core/Src/speck.c: In function 'Speck_CBC_Decrypt':
-../Core/Src/speck.c:208:9: warning: implicit declaration of function 'printf' [-Wimplicit-function-declaration]
-  208 |         printf("Расшифрованные данные до удаления паддинга: ");
-      |         ^~~~~~
-../Core/Src/speck.c:8:1: note: include '<stdio.h>' or provide a declaration of 'printf'
-    7 | #include <string.h>
-  +++ |+#include <stdio.h>
-    8 | 
-../Core/Src/speck.c:208:9: warning: incompatible implicit declaration of built-in function 'printf' [-Wbuiltin-declaration-mismatch]
-  208 |         printf("Расшифрованные данные до удаления паддинга: ");
-      |         ^~~~~~
-../Core/Src/speck.c:208:9: note: include '<stdio.h>' or provide a declaration of 'printf'
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28420	    252	   3100	  31772	   7c1c	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:09:24 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-../Core/Src/speck.c: In function 'Speck_CBC_Decrypt':
-../Core/Src/speck.c:216:5: warning: implicit declaration of function 'printf' [-Wimplicit-function-declaration]
-  216 |     printf("Расшифрованные данные до удаления паддинга: ");
-      |     ^~~~~~
-../Core/Src/speck.c:8:1: note: include '<stdio.h>' or provide a declaration of 'printf'
-    7 | #include <string.h>
-  +++ |+#include <stdio.h>
-    8 | 
-../Core/Src/speck.c:216:5: warning: incompatible implicit declaration of built-in function 'printf' [-Wbuiltin-declaration-mismatch]
-  216 |     printf("Расшифрованные данные до удаления паддинга: ");
-      |     ^~~~~~
-../Core/Src/speck.c:216:5: note: include '<stdio.h>' or provide a declaration of 'printf'
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28420	    252	   3100	  31772	   7c1c	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:11:57 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-../Core/Src/speck.c: In function 'Speck_CBC_Decrypt':
-../Core/Src/speck.c:216:5: warning: implicit declaration of function 'HAL_UART_Transmit' [-Wimplicit-function-declaration]
-  216 |     HAL_UART_Transmit(&huart2, (uint8_t*)"Расшифрованные данные до удаления паддинга:\r\n", 47, 100);
-      |     ^~~~~~~~~~~~~~~~~
-../Core/Src/speck.c:216:24: error: 'huart2' undeclared (first use in this function)
-  216 |     HAL_UART_Transmit(&huart2, (uint8_t*)"Расшифрованные данные до удаления паддинга:\r\n", 47, 100);
-      |                        ^~~~~~
-../Core/Src/speck.c:216:24: note: each undeclared identifier is reported only once for each function it appears in
-../Core/Src/speck.c:220:16: warning: implicit declaration of function 'sprintf' [-Wimplicit-function-declaration]
-  220 |         pos += sprintf(hex_buffer + pos, "  ");
-      |                ^~~~~~~
-../Core/Src/speck.c:8:1: note: include '<stdio.h>' or provide a declaration of 'sprintf'
-    7 | #include <string.h>
-  +++ |+#include <stdio.h>
-    8 | 
-../Core/Src/speck.c:220:16: warning: incompatible implicit declaration of built-in function 'sprintf' [-Wbuiltin-declaration-mismatch]
-  220 |         pos += sprintf(hex_buffer + pos, "  ");
-      |                ^~~~~~~
-../Core/Src/speck.c:220:16: note: include '<stdio.h>' or provide a declaration of 'sprintf'
-make: *** [Core/Src/subdir.mk:43: Core/Src/speck.o] Error 1
-"make -j8 all" terminated with exit code 2. Build might be incomplete.
-19:12:11 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-../Core/Src/speck.c: In function 'Speck_CBC_Decrypt':
-../Core/Src/speck.c:217:24: error: 'huart2' undeclared (first use in this function)
-  217 |     HAL_UART_Transmit(&huart2, (uint8_t*)"Расшифрованные данные до удаления паддинга:\r\n", 47, 100);
-      |                        ^~~~~~
-../Core/Src/speck.c:217:24: note: each undeclared identifier is reported only once for each function it appears in
-../Core/Src/speck.c:221:16: warning: implicit declaration of function 'sprintf' [-Wimplicit-function-declaration]
-  221 |         pos += sprintf(hex_buffer + pos, "  ");
-      |                ^~~~~~~
-../Core/Src/speck.c:9:1: note: include '<stdio.h>' or provide a declaration of 'sprintf'
-    8 | #include <string.h>
-  +++ |+#include <stdio.h>
-    9 | 
-../Core/Src/speck.c:221:16: warning: incompatible implicit declaration of built-in function 'sprintf' [-Wbuiltin-declaration-mismatch]
-  221 |         pos += sprintf(hex_buffer + pos, "  ");
-      |                ^~~~~~~
-../Core/Src/speck.c:221:16: note: include '<stdio.h>' or provide a declaration of 'sprintf'
-make: *** [Core/Src/subdir.mk:43: Core/Src/speck.o] Error 1
-"make -j8 all" terminated with exit code 2. Build might be incomplete.
-19:13:42 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-../Core/Src/speck.c: In function 'Speck_CBC_Decrypt':
-../Core/Src/speck.c:194:12: error: unknown type name 'UART_HandleTypeDef'
-  194 |     extern UART_HandleTypeDef huart2; // Убедитесь, что эта переменная доступна
-      |            ^~~~~~~~~~~~~~~~~~
-../Core/Src/speck.c:196:5: warning: implicit declaration of function 'sprintf' [-Wimplicit-function-declaration]
-  196 |     sprintf(debug_buffer, "Speck_CBC_Decrypt вызван: длина=%zu, IV=%02X%02X%02X%02X...\r\n",
-      |     ^~~~~~~
-../Core/Src/speck.c:8:1: note: include '<stdio.h>' or provide a declaration of 'sprintf'
-    7 | #include <string.h>
-  +++ |+#include <stdio.h>
-    8 | 
-../Core/Src/speck.c:196:5: warning: incompatible implicit declaration of built-in function 'sprintf' [-Wbuiltin-declaration-mismatch]
-  196 |     sprintf(debug_buffer, "Speck_CBC_Decrypt вызван: длина=%zu, IV=%02X%02X%02X%02X...\r\n",
-      |     ^~~~~~~
-../Core/Src/speck.c:196:5: note: include '<stdio.h>' or provide a declaration of 'sprintf'
-../Core/Src/speck.c:198:5: warning: implicit declaration of function 'HAL_UART_Transmit' [-Wimplicit-function-declaration]
-  198 |     HAL_UART_Transmit(&huart2, (uint8_t*)debug_buffer, strlen(debug_buffer), 100);
-      |     ^~~~~~~~~~~~~~~~~
-make: *** [Core/Src/subdir.mk:43: Core/Src/speck.o] Error 1
-"make -j8 all" terminated with exit code 2. Build might be incomplete.
-19:14:43 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28112	    252	   3100	  31464	   7ae8	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:15:44 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28360	    296	   3168	  31824	   7c50	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:15:46 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-size  inter.elf 
-   text	   data	    bss	    dec	    hex	filename
-  28360	    296	   3168	  31824	   7c50	inter.elf
-Finished building: default.size.stdout
- 
-19:16:44 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28356	    296	   3168	  31820	   7c4c	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:19:00 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28356	    296	   3168	  31820	   7c4c	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:21:39 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/main.o: in function `main':
-D:/diploma/inter/Debug/../Core/Src/main.c:155:(.text.main+0xb4): undefined reference to `Speck_CBC_Encrypt'
-C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: D:/diploma/inter/Debug/../Core/Src/main.c:158:(.text.main+0xc6): undefined reference to `Speck_CBC_Decrypt'
-C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `SecureUart_Send':
-D:/diploma/inter/Debug/../Core/Src/secure_uart.c:164:(.text.SecureUart_Send+0x16c): undefined reference to `Speck_CBC_Encrypt'
-C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `SecureUart_ProcessReceivedData':
-D:/diploma/inter/Debug/../Core/Src/secure_uart.c:312:(.text.SecureUart_ProcessReceivedData+0x1f8): undefined reference to `Speck_CBC_Decrypt'
-collect2.exe: error: ld returned 1 exit status
-make: *** [makefile:64: inter.elf] Error 1
-"make -j8 all" terminated with exit code 2. Build might be incomplete.
-19:22:25 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `SecureUart_Send':
-D:/diploma/inter/Debug/../Core/Src/secure_uart.c:164:(.text.SecureUart_Send+0x16c): undefined reference to `Speck_CBC_Encrypt'
-C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `SecureUart_ProcessReceivedData':
-D:/diploma/inter/Debug/../Core/Src/secure_uart.c:312:(.text.SecureUart_ProcessReceivedData+0x1f8): undefined reference to `Speck_CBC_Decrypt'
-collect2.exe: error: ld returned 1 exit status
-make: *** [makefile:64: inter.elf] Error 1
-"make -j8 all" terminated with exit code 2. Build might be incomplete.
-19:22:33 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `SecureUart_Send':
-D:/diploma/inter/Debug/../Core/Src/secure_uart.c:164:(.text.SecureUart_Send+0x16c): undefined reference to `Speck_CBC_Encrypt'
-C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `SecureUart_ProcessReceivedData':
-D:/diploma/inter/Debug/../Core/Src/secure_uart.c:312:(.text.SecureUart_ProcessReceivedData+0x1f8): undefined reference to `Speck_CBC_Decrypt'
-collect2.exe: error: ld returned 1 exit status
-make: *** [makefile:64: inter.elf] Error 1
-"make -j8 all" terminated with exit code 2. Build might be incomplete.
-19:23:39 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
-../Core/Src/secure_uart.c: In function 'SecureUart_Send':
-../Core/Src/secure_uart.c:164:29: warning: implicit declaration of function 'Speck_Encrypt_Simple'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
-  164 |         size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, iv, encrypted_data + IV_SIZE);
-      |                             ^~~~~~~~~~~~~~~~~~~~
-      |                             Speck_Encrypt
-../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
-../Core/Src/secure_uart.c:312:35: warning: implicit declaration of function 'Speck_Decrypt_Simple'; did you mean 'Speck_Decrypt'? [-Wimplicit-function-declaration]
-  312 |         size_t decrypted_length = Speck_Decrypt_Simple(
-      |                                   ^~~~~~~~~~~~~~~~~~~~
-      |                                   Speck_Decrypt
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28324	    252	   3100	  31676	   7bbc	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:28:47 **** Incremental Build of configuration Debug for project inter ****
+12:41:37 **** Incremental Build of configuration Debug for project inter ****
 make -j8 all 
 arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
 arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
 arm-none-eabi-gcc "../Core/Src/speck.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/speck.d" -MT"Core/Src/speck.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/speck.o"
 arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
-../Core/Src/main.c: In function 'main':
-../Core/Src/main.c:159:5: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
-  159 |     Speck_Decrypt(&test_ctx, test_cipher, test_result);
-      |     ^~~~~~~~~~~~~
-      |     Speck_Encrypt
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28252	    252	   3100	  31604	   7b74	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:29:06 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  27808	    252	   3100	  31160	   79b8	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:30:38 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
-../Core/Src/main.c: In function 'main':
-../Core/Src/main.c:159:5: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
-  159 |     Speck_Decrypt(&test_ctx, test_cipher, test_result);
-      |     ^~~~~~~~~~~~~
-      |     Speck_Encrypt
-arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: inter.elf
- 
-arm-none-eabi-size  inter.elf 
-arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
-   text	   data	    bss	    dec	    hex	filename
-  28252	    252	   3100	  31604	   7b74	inter.elf
-Finished building: default.size.stdout
- 
-Finished building: inter.list
- 
-19:31:42 **** Incremental Build of configuration Debug for project inter ****
-make -j8 all 
-arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
-../Core/Src/secure_uart.c: In function 'SecureUart_Init':
-../Core/Src/secure_uart.c:26:30: error: expected ';' before numeric constant
-   26 |     ctx->last_sequence_id = 4 294 967 295;
-      |                              ^~~~
-      |                              ;
+../Core/Src/secure_uart.c: In function 'SecureUart_Send':
+../Core/Src/secure_uart.c:153:81: warning: passing argument 4 of 'Speck_Encrypt_Simple' discards 'const' qualifier from pointer target type [-Wdiscarded-qualifiers]
+  153 |         size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, FIXED_IV, encrypted_data);
+      |                                                                                 ^~~~~~~~
+In file included from ../Core/Inc/secure_uart.h:13,
+                 from ../Core/Src/secure_uart.c:6:
+../Core/Inc/speck.h:54:41: note: expected 'uint8_t *' {aka 'unsigned char *'} but argument is of type 'const uint8_t *' {aka 'const unsigned char *'}
+   54 |                 size_t length, uint8_t* ciphertext);
+      |                                ~~~~~~~~~^~~~~~~~~~
+../Core/Src/secure_uart.c:153:29: error: too many arguments to function 'Speck_Encrypt_Simple'
+  153 |         size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, FIXED_IV, encrypted_data);
+      |                             ^~~~~~~~~~~~~~~~~~~~
+../Core/Inc/speck.h:53:8: note: declared here
+   53 | size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext,
+      |        ^~~~~~~~~~~~~~~~~~~~
 make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+make: *** Waiting for unfinished jobs....
 "make -j8 all" terminated with exit code 2. Build might be incomplete.
-19:31:52 **** Incremental Build of configuration Debug for project inter ****
+12:42:05 **** Incremental Build of configuration Debug for project inter ****
 make -j8 all 
 arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/secure_uart.c:15:22: warning: 'FIXED_IV' defined but not used [-Wunused-const-variable=]
+   15 | static const uint8_t FIXED_IV[IV_SIZE] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+      |                      ^~~~~~~~
 arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 Finished building target: inter.elf
  
 arm-none-eabi-size  inter.elf 
 arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
    text	   data	    bss	    dec	    hex	filename
-  28252	    252	   3100	  31604	   7b74	inter.elf
+  27868	    252	   3100	  31220	   79f4	inter.elf
 Finished building: default.size.stdout
  
 Finished building: inter.list
  
-19:32:43 **** Incremental Build of configuration Debug for project inter ****
+12:42:08 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-size  inter.elf 
+   text	   data	    bss	    dec	    hex	filename
+  27868	    252	   3100	  31220	   79f4	inter.elf
+Finished building: default.size.stdout
+ 
+12:45:24 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
+../Core/Src/secure_uart.c:15:22: warning: 'FIXED_IV' defined but not used [-Wunused-const-variable=]
+   15 | static const uint8_t FIXED_IV[IV_SIZE] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+      |                      ^~~~~~~~
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  27868	    252	   3100	  31220	   79f4	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+12:45:27 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-size  inter.elf 
+   text	   data	    bss	    dec	    hex	filename
+  27868	    252	   3100	  31220	   79f4	inter.elf
+Finished building: default.size.stdout
+ 
+12:47:58 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
+../Core/Src/secure_uart.c:15:31: error: 'IV_SIZE' undeclared here (not in a function)
+   15 | static const uint8_t FIXED_IV[IV_SIZE] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+      |                               ^~~~~~~
+../Core/Src/secure_uart.c:15:22: warning: 'FIXED_IV' defined but not used [-Wunused-variable]
+   15 | static const uint8_t FIXED_IV[IV_SIZE] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+      |                      ^~~~~~~~
+make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+make: *** Waiting for unfinished jobs....
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+12:48:14 **** Incremental Build of configuration Debug for project inter ****
 make -j8 all 
 arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
 arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
@@ -445,7 +125,102 @@ Finished building target: inter.elf
 arm-none-eabi-size  inter.elf 
 arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
    text	   data	    bss	    dec	    hex	filename
-  28252	    252	   3100	  31604	   7b74	inter.elf
+  27868	    252	   3084	  31204	   79e4	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+12:48:17 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-size  inter.elf 
+   text	   data	    bss	    dec	    hex	filename
+  27868	    252	   3084	  31204	   79e4	inter.elf
+Finished building: default.size.stdout
+ 
+12:51:13 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  27868	    252	   3084	  31204	   79e4	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+12:51:33 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  27868	    252	   3092	  31212	   79ec	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+12:52:42 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  27868	    256	   3088	  31212	   79ec	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+12:54:02 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  28064	    256	   3088	  31408	   7ab0	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+12:54:13 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  28256	    256	   3088	  31600	   7b70	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+12:54:46 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  28256	    156	   3092	  31504	   7b10	inter.elf
 Finished building: default.size.stdout
  
 Finished building: inter.list

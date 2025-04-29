@@ -10,7 +10,9 @@
 #include <time.h>
 
 // Глобальный счетчик для последовательных номеров
-static uint32_t g_sequence_counter = 1;
+static uint32_t g_sequence_counter = 0;
+
+static const uint8_t FIXED_IV[IV_SIZE] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
 
 /**
  * @brief Инициализация контекста защищенного UART
@@ -106,7 +108,7 @@ uint16_t SecureUart_CalculateCRC(const uint8_t *data, uint16_t length) {
 }
 
 /**
- * @brief Отправка защищенного фрейма по UART
+ * @brief Отправка защищенного фрейма по UART (с фиксированным IV)
  * @param ctx Указатель на структуру контекста
  * @param data Данные для отправки
  * @param length Длина данных
@@ -147,12 +149,32 @@ SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, ui
         SecureUart_DebugPrint(ctx->debug_uart, "Исходные данные перед шифрованием:\r\n");
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Оригинал: ", data, length);
 
-        // Шифрование данных (используем Simple версию)
-        size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, encrypted_data);
+        // Шифрование данных с фиксированным IV
+        // Модифицированная версия, которая не добавляет IV в выходные данные
+        size_t padded_length = Speck_GetPaddedLength(length);
+        uint8_t padded_data[256]; // Буфер для данных с паддингом
+
+        // Копируем данные
+        memcpy(padded_data, data, length);
+
+        // Добавляем паддинг
+        add_pkcs7_padding(padded_data, length, SPECK_BLOCK_SIZE);
+
+        // Шифруем блоки
+        size_t num_blocks = padded_length / SPECK_BLOCK_SIZE;
+        for (size_t i = 0; i < num_blocks; i++) {
+            Speck_Encrypt(&ctx->speck_ctx, padded_data + i * SPECK_BLOCK_SIZE,
+                          encrypted_data + i * SPECK_BLOCK_SIZE);
+        }
 
         // Обновляем указатель на данные и длину
         data = encrypted_data;
-        actual_data_length = enc_length;
+        actual_data_length = padded_length;
+
+        // Отладочный вывод
+        SecureUart_DebugPrint(ctx->debug_uart, "Зашифрованные данные (IV: %02X%02X%02X%02X...):\r\n",
+                              FIXED_IV[0], FIXED_IV[1], FIXED_IV[2], FIXED_IV[3]);
+        SecureUart_PrintHexBuffer(ctx->debug_uart, "Шифротекст: ", encrypted_data, actual_data_length);
     }
 
     // Длина данных
@@ -194,7 +216,7 @@ SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, ui
 }
 
 /**
- * @brief Обработка принятых данных
+ * @brief Обработка принятых данных (с фиксированным IV)
  * @param ctx Указатель на структуру контекста
  * @param packet Указатель на структуру для сохранения распакованных данных
  * @return Статус операции
@@ -295,19 +317,26 @@ SecureUartStatus SecureUart_ProcessReceivedData(SecureUartContext *ctx, SecureUa
         SecureUart_DebugPrint(ctx->debug_uart, "Зашифрованные данные (длина=%u):\r\n", data_length);
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Шифротекст: ", received_data, data_length);
 
-        // Используем Simple версию расшифрования
-        size_t decrypted_length = Speck_Decrypt_Simple(
-            &ctx->speck_ctx,
-            received_data,  // Полные данные
-            data_length,    // Полная длина данных
-            packet->data
-        );
+        // Модифицированная версия расшифрования с фиксированным IV
+        // Расшифровываем блоки
+        size_t num_blocks = data_length / SPECK_BLOCK_SIZE;
+        uint8_t temp_plaintext[256];
+
+        for (size_t i = 0; i < num_blocks; i++) {
+            Speck_Decrypt(&ctx->speck_ctx, received_data + i * SPECK_BLOCK_SIZE,
+                         temp_plaintext + i * SPECK_BLOCK_SIZE);
+        }
+
+        // Удаляем паддинг
+        size_t decrypted_length = remove_pkcs7_padding(temp_plaintext, data_length);
+
+        // Копируем расшифрованные данные
+        memcpy(packet->data, temp_plaintext, decrypted_length);
+        packet->data_length = decrypted_length;
 
         // Отладочный вывод расшифрованных данных
         SecureUart_DebugPrint(ctx->debug_uart, "Расшифрованные данные (длина=%u):\r\n", decrypted_length);
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Расшифровано: ", packet->data, decrypted_length);
-
-        packet->data_length = decrypted_length;
     } else {
         // Копирование данных без расшифровки
         if (data_length > 0) {

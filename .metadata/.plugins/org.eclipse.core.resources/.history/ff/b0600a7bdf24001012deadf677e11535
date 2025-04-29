@@ -32,7 +32,7 @@
  * +----------------+------------------+-------------+------------+-------------------+------------+
  */
 
-#define MIN_FRAME_SIZE        (FRAME_HEADER_SIZE + SEQUENCE_ID_SIZE + PACKET_TYPE_SIZE + 2 + MAC_SIZE) // Минимальный размер фрейма без данных
+#define MIN_FRAME_SIZE        (FRAME_HEADER_SIZE + SEQUENCE_ID_SIZE + PACKET_TYPE_SIZE + 1 + MAC_SIZE) // Минимальный размер фрейма без данных
 #define MAX_FRAME_SIZE        (MIN_FRAME_SIZE + MAX_DATA_SIZE)                      // Максимальный размер фрейма
 
 /* Статусы операций */

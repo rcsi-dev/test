@@ -19,6 +19,7 @@
 #define MAX_DATA_SIZE         128       // Максимальный размер данных
 #define SEQUENCE_ID_SIZE      4         // Размер идентификатора последовательности (4 байта)
 #define MAC_SIZE              8         // Размер MAC (8 байт)
+#define IV_SIZE               8         // Размер вектора инициализации (8 байт) для Speck
 #define PACKET_TYPE_SIZE      1         // Размер поля типа пакета
 
 /* Типы пакетов */
@@ -32,8 +33,8 @@
  * +----------------+------------------+-------------+------------+-------------------+------------+
  */
 
-#define MIN_FRAME_SIZE        (FRAME_HEADER_SIZE + SEQUENCE_ID_SIZE + PACKET_TYPE_SIZE + 2 + MAC_SIZE) // Минимальный размер фрейма без данных
-#define MAX_FRAME_SIZE        (MIN_FRAME_SIZE + MAX_DATA_SIZE)                      // Максимальный размер фрейма
+#define MIN_FRAME_SIZE        (FRAME_HEADER_SIZE + SEQUENCE_ID_SIZE + PACKET_TYPE_SIZE + 1 + MAC_SIZE) // Минимальный размер фрейма без данных
+#define MAX_FRAME_SIZE        (MIN_FRAME_SIZE + IV_SIZE + MAX_DATA_SIZE)                      // Максимальный размер фрейма
 
 /* Статусы операций */
 typedef enum {
@@ -83,6 +84,7 @@ SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, ui
 SecureUartStatus SecureUart_ProcessReceivedData(SecureUartContext *ctx, SecureUartPacket *packet);
 
 /* Вспомогательные функции */
+void SecureUart_GenerateIV(uint8_t *iv);
 void SecureUart_CalculateMAC(SecureUartContext *ctx, const uint8_t *data, uint16_t length, uint8_t *mac);
 void SecureUart_HandleUartRxEvent(SecureUartContext *ctx);
 void SecureUart_DebugPrint(UART_HandleTypeDef *huart, const char *format, ...);

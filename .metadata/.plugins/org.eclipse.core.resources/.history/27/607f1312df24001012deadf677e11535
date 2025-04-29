@@ -10,7 +10,9 @@
 #include <time.h>
 
 // Глобальный счетчик для последовательных номеров
-static uint32_t g_sequence_counter = 1;
+static uint32_t g_sequence_counter = 0;
+
+static const uint8_t FIXED_IV[IV_SIZE] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
 
 /**
  * @brief Инициализация контекста защищенного UART

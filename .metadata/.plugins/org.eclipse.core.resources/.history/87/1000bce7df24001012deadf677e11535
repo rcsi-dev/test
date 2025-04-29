@@ -54,7 +54,7 @@ uint8_t macKey[16] = {
     0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00
 };
 
-uint8_t testData[] = "Testing message";
+uint8_t testData[] = "Это тестовое сообщение для проверки защищенного UART протокола";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -168,7 +168,6 @@ int main(void)
     SecureUart_DebugPrint(&huart2, "MAC: SipHash 2-4\r\n");
     SecureUart_DebugPrint(&huart2, "====================================\r\n\r\n");
 
-    TestDecryption();
     /* USER CODE END 2 */
 
     /* Infinite loop */

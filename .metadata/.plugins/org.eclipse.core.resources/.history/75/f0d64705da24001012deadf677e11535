@@ -93,7 +93,7 @@ void Speck_Decrypt(const SpeckContext* ctx, const uint8_t* ciphertext, uint8_t* 
 /**
  * @brief Добавление дополнения PKCS#7 для блочного шифрования
  */
-void add_pkcs7_padding(uint8_t* data, size_t data_len, size_t block_size) {
+static void add_pkcs7_padding(uint8_t* data, size_t data_len, size_t block_size) {
     uint8_t padding_value = block_size - (data_len % block_size);
     for (size_t i = 0; i < padding_value; i++) {
         data[data_len + i] = padding_value;
@@ -103,7 +103,7 @@ void add_pkcs7_padding(uint8_t* data, size_t data_len, size_t block_size) {
 /**
  * @brief Удаление дополнения PKCS#7 после расшифрования
  */
-size_t remove_pkcs7_padding(uint8_t* data, size_t data_len) {
+static size_t remove_pkcs7_padding(uint8_t* data, size_t data_len) {
     if (data_len == 0) return 0;
 
     uint8_t padding_value = data[data_len - 1];
@@ -130,8 +130,11 @@ size_t Speck_GetPaddedLength(size_t length) {
 /**
  * @brief Упрощенное шифрование данных произвольной длины
  */
-size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext,
-		size_t length, uint8_t* ciphertext) {
+size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext, size_t length,
+                           const uint8_t* iv, uint8_t* ciphertext) {
+    // Копируем IV в начало шифротекста
+    memcpy(ciphertext, iv, SPECK_BLOCK_SIZE);
+
     size_t padded_length = Speck_GetPaddedLength(length);
     uint8_t padded_data[256]; // Буфер для данных с паддингом
 
@@ -154,8 +157,8 @@ size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext,
 /**
  * @brief Упрощенное расшифрование данных произвольной длины
  */
-size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext,
-		size_t length, uint8_t* plaintext) {
+size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext, size_t length,
+                           const uint8_t* iv, uint8_t* plaintext) {
     if (length <= SPECK_BLOCK_SIZE) return 0; // Некорректная длина
 
     // Расшифровываем блоки
