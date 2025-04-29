@@ -1,0 +1,262 @@
+#include "secure_uart.h"
+#include "string.h"
+
+/* Локальные функции */
+static void secure_uart_encrypt_data(secure_uart_handle_t *handle, const uint8_t *data, uint8_t length, uint8_t *encrypted);
+static uint8_t secure_uart_decrypt_data(secure_uart_handle_t *handle, const uint8_t *encrypted, uint8_t length, uint8_t *data);
+static void secure_uart_calculate_cmac(secure_uart_handle_t *handle, const uint8_t *data, uint8_t length,
+                                     uint32_t counter, uint8_t *cmac);
+static uint32_t secure_uart_prepare_frame(secure_uart_handle_t *handle, const uint8_t *data,
+                                     uint8_t length, uint8_t *frame_buffer);
+
+/* Инициализация защищенного UART */
+void secure_uart_init(secure_uart_handle_t *handle, UART_HandleTypeDef *huart, const uint32_t key[4],
+                     void (*receive_callback)(uint8_t *data, uint8_t length)) {
+    // Инициализация полей структуры
+    handle->huart = huart;
+    speck_init_key(key, &handle->key);
+    handle->last_rx_counter = 0;
+    handle->tx_counter = 0;
+    handle->processing = 0;
+    handle->receive_callback = receive_callback;
+
+    // Запуск приема данных по DMA
+    HAL_UART_Receive_DMA(huart, handle->rx_buffer, sizeof(handle->rx_buffer));
+
+    // Включение прерывания по IDLE
+    __HAL_UART_ENABLE_IT(huart, UART_IT_IDLE);
+}
+
+/* Отправка данных */
+void secure_uart_send(secure_uart_handle_t *handle, const uint8_t *data, uint8_t length) {
+    // Формирование фрейма для отправки
+    uint32_t frame_length = secure_uart_prepare_frame(handle, data, length, handle->tx_buffer);
+
+    // Отправка фрейма
+    HAL_UART_Transmit_DMA(handle->huart, handle->tx_buffer, frame_length);
+
+    // Увеличение счетчика отправки
+    handle->tx_counter++;
+}
+
+/* Обработка принятых данных */
+void secure_uart_process_received(secure_uart_handle_t *handle) {
+    if (handle->processing) {
+        return; // Уже идет обработка
+    }
+
+    handle->processing = 1;
+
+    // Получение размера данных в буфере DMA
+    uint32_t dma_head = sizeof(handle->rx_buffer) - __HAL_DMA_GET_COUNTER(handle->huart->hdmarx);
+
+    if (dma_head < SECURE_UART_FRAME_OVERHEAD) {
+        handle->processing = 0;
+        return; // Недостаточно данных для фрейма
+    }
+
+    // Поиск заголовка фрейма
+    uint32_t i;
+    for (i = 0; i <= dma_head - 4; i++) {
+        if (*(uint32_t*)(&handle->rx_buffer[i]) == SECURE_UART_HEADER) {
+            break;
+        }
+    }
+
+    if (i > dma_head - 4) {
+        handle->processing = 0;
+        return; // Заголовок не найден
+    }
+
+    // Проверка, достаточно ли данных для полного фрейма
+    if (i + 9 > dma_head) {
+        handle->processing = 0;
+        return; // Недостаточно данных для минимального фрейма
+    }
+
+    // Чтение длины данных
+    uint8_t data_len = handle->rx_buffer[i + 8];
+
+    // Проверка, достаточно ли данных для полного фрейма с указанной длиной
+    if (i + SECURE_UART_FRAME_OVERHEAD + data_len > dma_head) {
+        handle->processing = 0;
+        return; // Недостаточно данных для полного фрейма
+    }
+
+    // Чтение счетчика
+    uint32_t counter = *(uint32_t*)(&handle->rx_buffer[i + 4]);
+
+    // Проверка защиты от Replay-атак
+    if (counter <= handle->last_rx_counter) {
+        // Это повторная атака или устаревший пакет, игнорируем
+        handle->processing = 0;
+
+        // Очистка буфера до этого фрейма
+        if (i > 0) {
+            memmove(handle->rx_buffer, &handle->rx_buffer[i], dma_head - i);
+
+            // Перезапуск DMA с новым положением
+            HAL_UART_AbortReceive(handle->huart);
+            HAL_UART_Receive_DMA(handle->huart, handle->rx_buffer, sizeof(handle->rx_buffer));
+        }
+
+        return;
+    }
+
+    // Проверка CMAC
+    uint8_t calculated_cmac[8];
+    secure_uart_calculate_cmac(handle, &handle->rx_buffer[i + 9], data_len, counter, calculated_cmac);
+
+    if (memcmp(calculated_cmac, &handle->rx_buffer[i + 9 + data_len], 8) != 0) {
+        // CMAC не совпадает, игнорируем фрейм
+        handle->processing = 0;
+
+        // Очистка буфера до этого фрейма
+        if (i > 0) {
+            memmove(handle->rx_buffer, &handle->rx_buffer[i], dma_head - i);
+
+            // Перезапуск DMA с новым положением
+            HAL_UART_AbortReceive(handle->huart);
+            HAL_UART_Receive_DMA(handle->huart, handle->rx_buffer, sizeof(handle->rx_buffer));
+        }
+
+        return;
+    }
+
+    // Дешифрование данных
+    uint8_t decrypted_data[SECURE_UART_MAX_DATA_SIZE];
+    if (secure_uart_decrypt_data(handle, &handle->rx_buffer[i + 9], data_len, decrypted_data)) {
+        // Обновление счетчика приема
+        handle->last_rx_counter = counter;
+
+        // Вызов коллбэка с дешифрованными данными
+        if (handle->receive_callback) {
+            handle->receive_callback(decrypted_data, data_len);
+        }
+    }
+
+    // Очистка буфера после этого фрейма
+    uint32_t frame_end = i + SECURE_UART_FRAME_OVERHEAD + data_len;
+    if (frame_end < dma_head) {
+        memmove(handle->rx_buffer, &handle->rx_buffer[frame_end], dma_head - frame_end);
+    }
+
+    // Перезапуск DMA с новым положением
+    HAL_UART_AbortReceive(handle->huart);
+    HAL_UART_Receive_DMA(handle->huart, handle->rx_buffer, sizeof(handle->rx_buffer));
+
+    handle->processing = 0;
+}
+
+/* Обработка прерывания IDLE */
+void secure_uart_handle_idle(secure_uart_handle_t *handle) {
+    // Сброс флага IDLE
+    __HAL_UART_CLEAR_IDLEFLAG(handle->huart);
+
+    // Обработка принятых данных
+    secure_uart_process_received(handle);
+}
+
+/* Локальная функция: шифрование данных */
+static void secure_uart_encrypt_data(secure_uart_handle_t *handle, const uint8_t *data, uint8_t length, uint8_t *encrypted) {
+    uint32_t i, j;
+    uint32_t plaintext[2], ciphertext[2];
+
+    // Копирование исходных данных в буфер шифрования
+    memcpy(encrypted, data, length);
+
+    // Дополнение до блока, если необходимо
+    if (length % 8 != 0) {
+        for (i = length; i < (length + 8) & ~7; i++) {
+            encrypted[i] = 0;
+        }
+        length = (length + 7) & ~7; // Округление до кратного 8
+    }
+
+    // Шифрование блоков
+    for (i = 0; i < length; i += 8) {
+        // Формирование блока для шифрования
+        plaintext[0] = *(uint32_t*)(&encrypted[i]);
+        plaintext[1] = *(uint32_t*)(&encrypted[i + 4]);
+
+        // Шифрование блока
+        speck_encrypt(&handle->key, plaintext, ciphertext);
+
+        // Сохранение результата
+        *(uint32_t*)(&encrypted[i]) = ciphertext[0];
+        *(uint32_t*)(&encrypted[i + 4]) = ciphertext[1];
+    }
+}
+
+/* Локальная функция: дешифрование данных */
+static uint8_t secure_uart_decrypt_data(secure_uart_handle_t *handle, const uint8_t *encrypted, uint8_t length, uint8_t *data) {
+    uint32_t i;
+    uint32_t ciphertext[2], plaintext[2];
+
+    // Проверка длины данных (должна быть кратна размеру блока)
+    if (length % 8 != 0) {
+        return 0; // Ошибка длины
+    }
+
+    // Дешифрование блоков
+    for (i = 0; i < length; i += 8) {
+        // Формирование блока для дешифрования
+        ciphertext[0] = *(uint32_t*)(&encrypted[i]);
+        ciphertext[1] = *(uint32_t*)(&encrypted[i + 4]);
+
+        // Дешифрование блока
+        speck_decrypt(&handle->key, ciphertext, plaintext);
+
+        // Сохранение результата
+        *(uint32_t*)(&data[i]) = plaintext[0];
+        *(uint32_t*)(&data[i + 4]) = plaintext[1];
+    }
+
+    return 1; // Успешно
+}
+
+/* Локальная функция: вычисление CMAC */
+static void secure_uart_calculate_cmac(secure_uart_handle_t *handle, const uint8_t *data, uint8_t length,
+                                     uint32_t counter, uint8_t *cmac) {
+    // Буфер для данных с добавленным счетчиком
+    uint8_t buffer[SECURE_UART_MAX_DATA_SIZE + 4];
+
+    // Добавление счетчика в начало данных
+    *(uint32_t*)buffer = counter;
+
+    // Копирование данных после счетчика
+    memcpy(buffer + 4, data, length);
+
+    // Вычисление CMAC
+    speck_cmac(&handle->key, buffer, length + 4, cmac);
+}
+
+/* Локальная функция: подготовка фрейма */
+static uint32_t secure_uart_prepare_frame(secure_uart_handle_t *handle, const uint8_t *data,
+                                        uint8_t length, uint8_t *frame_buffer) {
+    uint32_t frame_pos = 0;
+
+    // Добавление заголовка
+    *(uint32_t*)(&frame_buffer[frame_pos]) = SECURE_UART_HEADER;
+    frame_pos += 4;
+
+    // Добавление счетчика
+    *(uint32_t*)(&frame_buffer[frame_pos]) = handle->tx_counter;
+    frame_pos += 4;
+
+    // Добавление длины данных
+    frame_buffer[frame_pos++] = length;
+
+    // Шифрование и добавление данных
+    secure_uart_encrypt_data(handle, data, length, &frame_buffer[frame_pos]);
+
+    // Вычисление длины зашифрованных данных (округление вверх до кратного 8)
+    uint8_t encrypted_length = (length + 7) & ~7;
+    frame_pos += encrypted_length;
+
+    // Вычисление и добавление CMAC
+    secure_uart_calculate_cmac(handle, &frame_buffer[9], encrypted_length, handle->tx_counter, &frame_buffer[frame_pos]);
+    frame_pos += 8;
+
+    return frame_pos;
+}

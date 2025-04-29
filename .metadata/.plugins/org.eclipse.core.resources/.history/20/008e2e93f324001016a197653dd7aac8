@@ -1,0 +1,201 @@
+#include "secure_uart.h"
+#include <string.h>
+#include <stdio.h>
+
+// Объявление внешних переменных
+extern UART_HandleTypeDef huart1; // UART для отправки
+extern UART_HandleTypeDef huart2; // UART для отладки
+extern UART_HandleTypeDef huart6; // UART для приема
+
+// Буферы для приема и передачи
+static uint8_t rxBuffer[sizeof(SecureFrame) + 10]; // Буфер для приема (с запасом)
+static uint8_t txBuffer[sizeof(SecureFrame)];      // Буфер для передачи
+static uint8_t debugBuffer[512];                   // Буфер для отладочных сообщений
+
+// Статические переменные
+static uint32_t sequenceCounter = 0; // Счетчик последовательности
+
+// Инициализация протокола
+void SecureUART_Init(void) {
+    // Сброс счетчика последовательности
+    sequenceCounter = 0;
+
+    // Запуск приема данных по DMA в циркулярном режиме
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart6, rxBuffer, sizeof(rxBuffer));
+
+    // Отключение полудуплексного режима приема для DMA
+    __HAL_DMA_DISABLE_IT(huart6.hdmarx, DMA_IT_HT);
+
+    // Отладочное сообщение
+    sprintf((char*)debugBuffer, "Защищенный UART протокол инициализирован (циркулярный режим DMA)\r\n");
+    HAL_UART_Transmit(&huart2, debugBuffer, strlen((char*)debugBuffer), HAL_MAX_DELAY);
+}
+
+// Формирование пакета
+void SecureUART_PacketInit(SecurePacket *packet, uint8_t *data, uint8_t length) {
+    packet->dataLength = length;
+    packet->sequenceCounter = sequenceCounter++;
+    memcpy(packet->data, data, length);
+}
+
+// Формирование фрейма из пакета
+void SecureUART_FrameInit(SecureFrame *frame, SecurePacket *packet) {
+    uint8_t *framePtr = (uint8_t*)frame;
+    uint16_t frameIndex = 0;
+
+    // Добавление стартового байта
+    framePtr[frameIndex++] = START_BYTE;
+
+    // Добавление длины данных
+    framePtr[frameIndex++] = packet->dataLength;
+
+    // Добавление счетчика последовательности (4 байта)
+    framePtr[frameIndex++] = (packet->sequenceCounter >> 24) & 0xFF;
+    framePtr[frameIndex++] = (packet->sequenceCounter >> 16) & 0xFF;
+    framePtr[frameIndex++] = (packet->sequenceCounter >> 8) & 0xFF;
+    framePtr[frameIndex++] = packet->sequenceCounter & 0xFF;
+
+    // Добавление данных
+    memcpy(&framePtr[frameIndex], packet->data, packet->dataLength);
+    frameIndex += packet->dataLength;
+
+    // Вычисление и добавление CRC
+    framePtr[frameIndex] = SecureUART_CalculateCRC8(framePtr, frameIndex);
+}
+
+// Отправка фрейма
+void SecureUART_SendFrame(SecureFrame *frame) {
+    uint16_t frameSize = 6 + frame->dataLength + 1; // startByte + dataLength + sequenceCounter(4) + data + crc
+
+    // Копирование фрейма в буфер передачи
+    memcpy(txBuffer, frame, frameSize);
+
+    // Отправка по DMA
+    HAL_UART_Transmit_DMA(&huart1, txBuffer, frameSize);
+
+    // Отладочное сообщение
+    SecureUART_PrintDebug("Отправлен фрейм", txBuffer, frameSize);
+}
+
+// Обработка принятого фрейма
+int8_t SecureUART_ParseFrame(uint8_t *buffer, uint16_t length, SecurePacket *packet) {
+    if (length < 7) { // Минимальная длина фрейма (startByte + dataLength + sequenceCounter(4) + crc)
+        return -1; // Недостаточная длина
+    }
+
+    if (buffer[0] != START_BYTE) {
+        return -2; // Неверный стартовый байт
+    }
+
+    uint8_t dataLength = buffer[1];
+    if (dataLength + 7 > length) {
+        return -3; // Недостаточная длина для указанного размера данных
+    }
+
+    // Проверка CRC
+    uint8_t calculatedCRC = SecureUART_CalculateCRC8(buffer, dataLength + 6);
+    if (calculatedCRC != buffer[dataLength + 6]) {
+        return -4; // Неверная контрольная сумма
+    }
+
+    // Заполнение пакета
+    packet->dataLength = dataLength;
+    packet->sequenceCounter = ((uint32_t)buffer[2] << 24) |
+                              ((uint32_t)buffer[3] << 16) |
+                              ((uint32_t)buffer[4] << 8) |
+                              buffer[5];
+    memcpy(packet->data, &buffer[6], dataLength);
+
+    return 0; // Успех
+}
+
+// Вычисление CRC8
+uint8_t SecureUART_CalculateCRC8(uint8_t *data, uint16_t length) {
+    uint8_t crc = 0xFF;
+
+    for (uint16_t i = 0; i < length; i++) {
+        crc ^= data[i];
+
+        for (uint8_t j = 0; j < 8; j++) {
+            if (crc & 0x80) {
+                crc = (crc << 1) ^ 0x31; // Полином x^8 + x^5 + x^4 + 1
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+
+    return crc;
+}
+
+// Обработчик прерывания IDLE
+void SecureUART_IDLECallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART6) {
+        // Получаем размер принятых данных
+        uint16_t rxSize = sizeof(rxBuffer) - __HAL_DMA_GET_COUNTER(huart->hdmarx);
+
+        // В циркулярном режиме не останавливаем DMA
+        // HAL_UART_DMAStop(huart);  // Эта строка больше не нужна
+
+        // Обрабатываем принятые данные
+        SecurePacket receivedPacket;
+        if (SecureUART_ParseFrame(rxBuffer, rxSize, &receivedPacket) == 0) {
+            // Отладочное сообщение
+            SecureUART_PrintDebug("Принят фрейм", rxBuffer, rxSize);
+
+            // Дополнительная отладочная информация о распарсенном пакете
+            sprintf((char*)debugBuffer, "Распарсенный пакет: Длина=%u, Счетчик=%lu, Данные=",
+                    receivedPacket.dataLength, receivedPacket.sequenceCounter);
+            HAL_UART_Transmit(&huart2, debugBuffer, strlen((char*)debugBuffer), HAL_MAX_DELAY);
+
+            for (uint8_t i = 0; i < receivedPacket.dataLength; i++) {
+                sprintf((char*)debugBuffer, "%02X ", receivedPacket.data[i]);
+                HAL_UART_Transmit(&huart2, debugBuffer, strlen((char*)debugBuffer), HAL_MAX_DELAY);
+            }
+
+            sprintf((char*)debugBuffer, "\r\n");
+            HAL_UART_Transmit(&huart2, debugBuffer, strlen((char*)debugBuffer), HAL_MAX_DELAY);
+        } else {
+            // Ошибка при разборе фрейма
+            sprintf((char*)debugBuffer, "Ошибка при разборе принятого фрейма\r\n");
+            HAL_UART_Transmit(&huart2, debugBuffer, strlen((char*)debugBuffer), HAL_MAX_DELAY);
+        }
+
+        // В циркулярном режиме не нужно перезапускать DMA
+        // DMA продолжит работать автоматически
+    }
+}
+
+// Обработчик завершения приема DMA
+void SecureUART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART6) {
+        // В циркулярном режиме DMA автоматически перезапускается,
+        // поэтому ничего делать не нужно
+
+        // Можно добавить обработку данных, если буфер полностью заполнен
+        // Это может быть полезно, если данные приходят большими блоками
+        sprintf((char*)debugBuffer, "Буфер DMA заполнен\r\n");
+        HAL_UART_Transmit(&huart2, debugBuffer, strlen((char*)debugBuffer), HAL_MAX_DELAY);
+    }
+}
+
+// Обработчик завершения передачи DMA
+void SecureUART_TxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART1) {
+        // Дополнительные действия при необходимости
+    }
+}
+
+// Печать отладочной информации
+void SecureUART_PrintDebug(const char *title, uint8_t *data, uint16_t length) {
+    sprintf((char*)debugBuffer, "%s (%u байт): ", title, length);
+    HAL_UART_Transmit(&huart2, debugBuffer, strlen((char*)debugBuffer), HAL_MAX_DELAY);
+
+    for (uint16_t i = 0; i < length; i++) {
+        sprintf((char*)debugBuffer, "%02X ", data[i]);
+        HAL_UART_Transmit(&huart2, debugBuffer, strlen((char*)debugBuffer), HAL_MAX_DELAY);
+    }
+
+    sprintf((char*)debugBuffer, "\r\n");
+    HAL_UART_Transmit(&huart2, debugBuffer, strlen((char*)debugBuffer), HAL_MAX_DELAY);
+}

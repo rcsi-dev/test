@@ -1,0 +1,4 @@
+../Core/Src/speck.c:10:6:speck_init_key	2
+../Core/Src/speck.c:24:6:speck_encrypt	2
+../Core/Src/speck.c:35:6:speck_decrypt	2
+../Core/Src/speck.c:50:6:speck_cmac	6

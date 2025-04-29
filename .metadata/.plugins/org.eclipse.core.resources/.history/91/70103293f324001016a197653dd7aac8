@@ -1,0 +1,59 @@
+#ifndef SECURE_UART_H
+#define SECURE_UART_H
+
+#include "main.h"
+#include <stdint.h>
+
+// Определение максимального размера данных в пакете
+#define MAX_DATA_SIZE 256
+
+// Определение стартового байта
+#define START_BYTE 0xAA
+
+// Определение структуры пакета
+typedef struct {
+    uint8_t dataLength;          // Длина данных
+    uint32_t sequenceCounter;    // Счетчик последовательности (для защиты от Replay-атак)
+    uint8_t data[MAX_DATA_SIZE]; // Данные
+} SecurePacket;
+
+// Определение структуры фрейма
+typedef struct {
+    uint8_t startByte;           // Стартовый байт
+    uint8_t dataLength;          // Длина данных
+    uint32_t sequenceCounter;    // Счетчик последовательности
+    uint8_t data[MAX_DATA_SIZE]; // Данные
+    uint8_t crc;                 // Контрольная сумма
+} SecureFrame;
+
+// Инициализация протокола
+void SecureUART_Init(void);
+
+// Формирование пакета
+void SecureUART_PacketInit(SecurePacket *packet, uint8_t *data, uint8_t length);
+
+// Формирование фрейма из пакета
+void SecureUART_FrameInit(SecureFrame *frame, SecurePacket *packet);
+
+// Отправка фрейма
+void SecureUART_SendFrame(SecureFrame *frame);
+
+// Обработка принятого фрейма
+int8_t SecureUART_ParseFrame(uint8_t *buffer, uint16_t length, SecurePacket *packet);
+
+// Вычисление CRC8
+uint8_t SecureUART_CalculateCRC8(uint8_t *data, uint16_t length);
+
+// Обработчик прерывания IDLE
+void SecureUART_IDLECallback(UART_HandleTypeDef *huart);
+
+// Обработчик завершения приема DMA
+void SecureUART_RxCpltCallback(UART_HandleTypeDef *huart);
+
+// Обработчик завершения передачи DMA
+void SecureUART_TxCpltCallback(UART_HandleTypeDef *huart);
+
+// Печать отладочной информации
+void SecureUART_PrintDebug(const char *title, uint8_t *data, uint16_t length);
+
+#endif /* SECURE_UART_H */

@@ -1,0 +1,4 @@
+../Core/Src/speck.c:10:6:speck_init_key	40	static
+../Core/Src/speck.c:24:6:speck_encrypt	32	static
+../Core/Src/speck.c:35:6:speck_decrypt	32	static
+../Core/Src/speck.c:50:6:speck_cmac	152	static
