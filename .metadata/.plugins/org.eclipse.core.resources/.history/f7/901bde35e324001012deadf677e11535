@@ -43,6 +43,8 @@ void SecureUart_EnableEncryption(SecureUartContext *ctx, const uint8_t *key) {
     Speck_Init(&ctx->speck_ctx, key);
     ctx->encryption_enabled = true;
 
+    SecureUart_DebugPrint(ctx->debug_uart, "Ключ шифрования для UART: ");
+    SecureUart_PrintHexBuffer(ctx->debug_uart, "", key, 16);
     SecureUart_DebugPrint(ctx->debug_uart, "Шифрование включено\r\n");
 }
 
@@ -296,24 +298,12 @@ SecureUartStatus SecureUart_ProcessReceivedData(SecureUartContext *ctx, SecureUa
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Шифротекст: ", received_data, data_length);
 
         // Используем Simple версию расшифрования
-//        size_t decrypted_length = Speck_Decrypt_Simple(
-//            &ctx->speck_ctx,
-//            received_data,  // Полные данные
-//            data_length,    // Полная длина данных
-//            packet->data
-//        );
-
-
-        size_t decrypted_length = 0;
-        for (size_t i = 0; i < data_length / SPECK_BLOCK_SIZE; i++) {
-            Speck_Decrypt(&ctx->speck_ctx,
-                         received_data + i * SPECK_BLOCK_SIZE,
-                         packet->data + i * SPECK_BLOCK_SIZE);
-            decrypted_length += SPECK_BLOCK_SIZE;
-        }
-
-        // Удаляем паддинг если нужно
-        decrypted_length = remove_pkcs7_padding(packet->data, decrypted_length);
+        size_t decrypted_length = Speck_Decrypt_Simple(
+            &ctx->speck_ctx,
+            received_data,  // Полные данные
+            data_length,    // Полная длина данных
+            packet->data
+        );
 
         // Отладочный вывод расшифрованных данных
         SecureUart_DebugPrint(ctx->debug_uart, "Расшифрованные данные (длина=%u):\r\n", decrypted_length);

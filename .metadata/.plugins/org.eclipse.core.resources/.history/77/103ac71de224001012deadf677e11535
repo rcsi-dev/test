@@ -130,8 +130,8 @@ size_t Speck_GetPaddedLength(size_t length) {
 /**
  * @brief Упрощенное шифрование данных произвольной длины
  */
-size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext, size_t length, uint8_t* ciphertext) {
-    // Простое шифрование по блокам без усложнений
+size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext,
+        size_t length, uint8_t* ciphertext) {
     size_t padded_length = Speck_GetPaddedLength(length);
     uint8_t padded_data[256]; // Буфер для данных с паддингом
 
@@ -141,29 +141,40 @@ size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext, s
     // Добавляем паддинг
     add_pkcs7_padding(padded_data, length, SPECK_BLOCK_SIZE);
 
-    // Шифруем блоки
-    for (size_t i = 0; i < padded_length / SPECK_BLOCK_SIZE; i++) {
-        Speck_Encrypt(ctx, padded_data + i * SPECK_BLOCK_SIZE,
-                     ciphertext + i * SPECK_BLOCK_SIZE);
+    // Заполняем первые SPECK_BLOCK_SIZE байт нулями или другими константами
+    // (можно добавить идентификатор версии, метку времени и т.д.)
+    for (int i = 0; i < SPECK_BLOCK_SIZE; i++) {
+        ciphertext[i] = 0x00; // Просто нули для совместимости
     }
 
-    return padded_length;
+    // Шифруем блоки
+    size_t num_blocks = padded_length / SPECK_BLOCK_SIZE;
+    for (size_t i = 0; i < num_blocks; i++) {
+        Speck_Encrypt(ctx, padded_data + i * SPECK_BLOCK_SIZE,
+                      ciphertext + SPECK_BLOCK_SIZE + i * SPECK_BLOCK_SIZE);
+    }
+
+    return SPECK_BLOCK_SIZE + padded_length;
 }
 
-size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext, size_t length, uint8_t* plaintext) {
-    // Проверка кратности размеру блока
-    if (length % SPECK_BLOCK_SIZE != 0) {
-        return 0;
-    }
+/**
+ * @brief Упрощенное расшифрование данных произвольной длины
+ */
+size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext,
+		size_t length, uint8_t* plaintext) {
+    if (length <= SPECK_BLOCK_SIZE) return 0; // Некорректная длина
 
     // Расшифровываем блоки
-    for (size_t i = 0; i < length / SPECK_BLOCK_SIZE; i++) {
-        Speck_Decrypt(ctx, ciphertext + i * SPECK_BLOCK_SIZE,
-                     plaintext + i * SPECK_BLOCK_SIZE);
+    size_t encrypted_len = length - SPECK_BLOCK_SIZE;
+    size_t num_blocks = encrypted_len / SPECK_BLOCK_SIZE;
+
+    for (size_t i = 0; i < num_blocks; i++) {
+        Speck_Decrypt(ctx, ciphertext + SPECK_BLOCK_SIZE + i * SPECK_BLOCK_SIZE,
+                      plaintext + i * SPECK_BLOCK_SIZE);
     }
 
     // Удаляем паддинг
-    return remove_pkcs7_padding(plaintext, length);
+    return remove_pkcs7_padding(plaintext, encrypted_len);
 }
 
 /*

@@ -6,5 +6,5 @@
 ../Core/Src/speck.c:96:6:add_pkcs7_padding	32	static
 ../Core/Src/speck.c:106:8:remove_pkcs7_padding	24	static
 ../Core/Src/speck.c:126:8:Speck_GetPaddedLength	16	static
-../Core/Src/speck.c:133:8:Speck_Encrypt_Simple	304	static
-../Core/Src/speck.c:157:8:Speck_Decrypt_Simple	40	static
+../Core/Src/speck.c:133:8:Speck_Encrypt_Simple	296	static
+../Core/Src/speck.c:153:8:Speck_Decrypt_Simple	32	static

@@ -146,6 +146,12 @@ int main(void)
     MX_USART2_UART_Init();
     MX_USART6_UART_Init();
     /* USER CODE BEGIN 2 */
+
+//    SpeckContext shared_ctx;
+//    Speck_Init(&shared_ctx, encryptionKey);
+//    memcpy(&TxContext.speck_ctx, &shared_ctx, sizeof(SpeckContext));
+//    memcpy(&RxContext.speck_ctx, &shared_ctx, sizeof(SpeckContext));
+
     // Инициализация контекстов защищенного UART
     SecureUart_Init(&TxContext, &huart1, &huart2);
     SecureUart_Init(&RxContext, &huart6, &huart2);
@@ -156,9 +162,6 @@ int main(void)
 
     SecureUart_EnableMAC(&TxContext, macKey);
     SecureUart_EnableMAC(&RxContext, macKey);
-
-    Speck_Init(&TxContext.speck_ctx, encryptionKey);
-    Speck_Init(&RxContext.speck_ctx, encryptionKey);
 
     // Запуск приема в режиме DMA с IDLE прерыванием
     SecureUart_StartReceive(&TxContext);

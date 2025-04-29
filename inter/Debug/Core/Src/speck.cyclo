@@ -7,4 +7,4 @@
 ../Core/Src/speck.c:106:8:remove_pkcs7_padding	6
 ../Core/Src/speck.c:126:8:Speck_GetPaddedLength	1
 ../Core/Src/speck.c:133:8:Speck_Encrypt_Simple	2
-../Core/Src/speck.c:157:8:Speck_Decrypt_Simple	3
+../Core/Src/speck.c:153:8:Speck_Decrypt_Simple	3
