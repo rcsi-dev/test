@@ -146,11 +146,9 @@ SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, ui
         // Отладочный вывод исходных данных
         SecureUart_DebugPrint(ctx->debug_uart, "Исходные данные перед шифрованием:\r\n");
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Оригинал: ", data, length);
-        uint32_t start = DWT->CYCCNT;
+
         // Шифрование данных (используем Simple версию)
         size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, encrypted_data);
-        uint32_t cycles = DWT->CYCCNT - start;
-        SecureUart_DebugPrint(ctx->debug_uart, "Операция заняла %lu тактов\r\n", cycles);
 
         // Обновляем указатель на данные и длину
         data = encrypted_data;

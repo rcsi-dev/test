@@ -146,11 +146,9 @@ SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, ui
         // Отладочный вывод исходных данных
         SecureUart_DebugPrint(ctx->debug_uart, "Исходные данные перед шифрованием:\r\n");
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Оригинал: ", data, length);
-        uint32_t start = DWT->CYCCNT;
+
         // Шифрование данных (используем Simple версию)
         size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, encrypted_data);
-        uint32_t cycles = DWT->CYCCNT - start;
-        SecureUart_DebugPrint(ctx->debug_uart, "Операция заняла %lu тактов\r\n", cycles);
 
         // Обновляем указатель на данные и длину
         data = encrypted_data;
@@ -297,21 +295,25 @@ SecureUartStatus SecureUart_ProcessReceivedData(SecureUartContext *ctx, SecureUa
         SecureUart_DebugPrint(ctx->debug_uart, "Зашифрованные данные (длина=%u):\r\n", data_length);
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Шифротекст: ", received_data, data_length);
 
-        // Decrypt block by block directly
+        // Используем Simple версию расшифрования
+//        size_t decrypted_length = Speck_Decrypt_Simple(
+//            &ctx->speck_ctx,
+//            received_data,  // Полные данные
+//            data_length,    // Полная длина данных
+//            packet->data
+//        );
+
+
+        size_t decrypted_length = 0;
         for (size_t i = 0; i < data_length / SPECK_BLOCK_SIZE; i++) {
-            Speck_Decrypt(ctx,
+            Speck_Decrypt(&ctx->speck_ctx,
                          received_data + i * SPECK_BLOCK_SIZE,
                          packet->data + i * SPECK_BLOCK_SIZE);
+            decrypted_length += SPECK_BLOCK_SIZE;
         }
 
-        // Remove padding if present
-        size_t decrypted_length = data_length;
-        if (data_length >= SPECK_BLOCK_SIZE) {
-            decrypted_length = remove_pkcs7_padding(packet->data, data_length);
-        }
-
-        // Add null terminator for string display
-        packet->data[decrypted_length] = 0;
+        // Удаляем паддинг если нужно
+        decrypted_length = remove_pkcs7_padding(packet->data, decrypted_length);
 
         // Отладочный вывод расшифрованных данных
         SecureUart_DebugPrint(ctx->debug_uart, "Расшифрованные данные (длина=%u):\r\n", decrypted_length);

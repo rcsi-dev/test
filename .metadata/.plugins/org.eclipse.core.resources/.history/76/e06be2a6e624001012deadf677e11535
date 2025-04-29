@@ -12,6 +12,11 @@
 // Глобальный счетчик для последовательных номеров
 static uint32_t g_sequence_counter = 1;
 
+uint8_t encryptionKey[16] = {
+    0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+    0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10
+};
+
 /**
  * @brief Инициализация контекста защищенного UART
  * @param ctx Указатель на структуру контекста
@@ -146,11 +151,9 @@ SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, ui
         // Отладочный вывод исходных данных
         SecureUart_DebugPrint(ctx->debug_uart, "Исходные данные перед шифрованием:\r\n");
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Оригинал: ", data, length);
-        uint32_t start = DWT->CYCCNT;
+
         // Шифрование данных (используем Simple версию)
         size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, encrypted_data);
-        uint32_t cycles = DWT->CYCCNT - start;
-        SecureUart_DebugPrint(ctx->debug_uart, "Операция заняла %lu тактов\r\n", cycles);
 
         // Обновляем указатель на данные и длину
         data = encrypted_data;
@@ -297,9 +300,13 @@ SecureUartStatus SecureUart_ProcessReceivedData(SecureUartContext *ctx, SecureUa
         SecureUart_DebugPrint(ctx->debug_uart, "Зашифрованные данные (длина=%u):\r\n", data_length);
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Шифротекст: ", received_data, data_length);
 
+        // Create a fresh context for decryption using the same key
+        SpeckContext fresh_ctx;
+        Speck_Init(&fresh_ctx, encryptionKey); // Using global encryptionKey directly
+
         // Decrypt block by block directly
         for (size_t i = 0; i < data_length / SPECK_BLOCK_SIZE; i++) {
-            Speck_Decrypt(ctx,
+            Speck_Decrypt(&fresh_ctx,
                          received_data + i * SPECK_BLOCK_SIZE,
                          packet->data + i * SPECK_BLOCK_SIZE);
         }

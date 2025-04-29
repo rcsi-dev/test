@@ -4,8 +4,8 @@
 ../Core/Src/secure_uart.c:66:6:SecureUart_StartReceive	16	static
 ../Core/Src/secure_uart.c:83:6:SecureUart_CalculateMAC	24	static
 ../Core/Src/secure_uart.c:93:10:SecureUart_CalculateCRC	24	static
-../Core/Src/secure_uart.c:115:18:SecureUart_Send	336	static
-../Core/Src/secure_uart.c:202:18:SecureUart_ProcessReceivedData	72	static
-../Core/Src/secure_uart.c:347:6:SecureUart_HandleUartRxEvent	160	static
-../Core/Src/secure_uart.c:381:6:SecureUart_DebugPrint	284	static
-../Core/Src/secure_uart.c:400:6:SecureUart_PrintHexBuffer	48	static
+../Core/Src/secure_uart.c:115:18:SecureUart_Send	344	static
+../Core/Src/secure_uart.c:204:18:SecureUart_ProcessReceivedData	72	static
+../Core/Src/secure_uart.c:345:6:SecureUart_HandleUartRxEvent	160	static
+../Core/Src/secure_uart.c:379:6:SecureUart_DebugPrint	284	static
+../Core/Src/secure_uart.c:398:6:SecureUart_PrintHexBuffer	48	static

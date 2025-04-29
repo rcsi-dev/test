@@ -392,3 +392,319 @@ Finished building: default.size.stdout
  
 Finished building: inter.list
  
+13:34:41 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:300:32: error: 'encryptionKey' undeclared (first use in this function)
+  300 |         Speck_Init(&fresh_ctx, encryptionKey); // Using global encryptionKey directly
+      |                                ^~~~~~~~~~~~~
+../Core/Src/secure_uart.c:300:32: note: each undeclared identifier is reported only once for each function it appears in
+../Core/Src/secure_uart.c:304:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  304 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:35:18 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_hal_msp.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_hal_msp.d" -MT"Core/Src/stm32f4xx_hal_msp.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_hal_msp.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:304:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  304 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/stm32f4xx_hal_msp.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/stm32f4xx_it.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: first defined here
+collect2.exe: error: ld returned 1 exit status
+make: *** [makefile:64: inter.elf] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:36:46 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_hal_msp.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_hal_msp.d" -MT"Core/Src/stm32f4xx_hal_msp.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_hal_msp.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:304:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  304 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/stm32f4xx_hal_msp.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/stm32f4xx_it.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: first defined here
+collect2.exe: error: ld returned 1 exit status
+make: *** [makefile:64: inter.elf] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:37:30 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_hal_msp.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_hal_msp.d" -MT"Core/Src/stm32f4xx_hal_msp.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_hal_msp.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:300:32: error: 'encryptionKey' undeclared (first use in this function)
+  300 |         Speck_Init(&fresh_ctx, encryptionKey); // Using global encryptionKey directly
+      |                                ^~~~~~~~~~~~~
+../Core/Src/secure_uart.c:300:32: note: each undeclared identifier is reported only once for each function it appears in
+../Core/Src/secure_uart.c:304:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  304 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+make: *** Waiting for unfinished jobs....
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:37:57 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_hal_msp.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_hal_msp.d" -MT"Core/Src/stm32f4xx_hal_msp.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_hal_msp.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:304:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  304 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/stm32f4xx_hal_msp.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/stm32f4xx_it.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Inc/main.h:33: first defined here
+collect2.exe: error: ld returned 1 exit status
+make: *** [makefile:64: inter.elf] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:38:46 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_hal_msp.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_hal_msp.d" -MT"Core/Src/stm32f4xx_hal_msp.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_hal_msp.o"
+arm-none-eabi-gcc "../Core/Src/stm32f4xx_it.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/stm32f4xx_it.d" -MT"Core/Src/stm32f4xx_it.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/stm32f4xx_it.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:300:32: error: 'encryptionKey' undeclared (first use in this function)
+  300 |         Speck_Init(&fresh_ctx, encryptionKey); // Using global encryptionKey directly
+      |                                ^~~~~~~~~~~~~
+../Core/Src/secure_uart.c:300:32: note: each undeclared identifier is reported only once for each function it appears in
+../Core/Src/secure_uart.c:304:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  304 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+make: *** Waiting for unfinished jobs....
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:41:40 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:309:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  309 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/secure_uart.c:15: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:47: first defined here
+collect2.exe: error: ld returned 1 exit status
+make: *** [makefile:64: inter.elf] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:44:04 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/main.c: In function 'TestDecryption':
+../Core/Src/main.c:97:44: error: 'encryptionKey' undeclared (first use in this function); did you mean 'encryption_key'?
+   97 |     SecureUart_PrintHexBuffer(&huart2, "", encryptionKey, 16);
+      |                                            ^~~~~~~~~~~~~
+      |                                            encryption_key
+../Core/Src/main.c:97:44: note: each undeclared identifier is reported only once for each function it appears in
+make: *** [Core/Src/subdir.mk:43: Core/Src/main.o] Error 1
+make: *** Waiting for unfinished jobs....
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:300:32: error: 'encryptionKey' undeclared (first use in this function)
+  300 |         Speck_Init(&fresh_ctx, encryptionKey); // Using global encryptionKey directly
+      |                                ^~~~~~~~~~~~~
+../Core/Src/secure_uart.c:300:32: note: each undeclared identifier is reported only once for each function it appears in
+../Core/Src/secure_uart.c:304:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  304 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:44:31 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/main.c: In function 'TestDecryption':
+../Core/Src/main.c:97:44: error: 'encryptionKey' undeclared (first use in this function); did you mean 'encryption_key'?
+   97 |     SecureUart_PrintHexBuffer(&huart2, "", encryptionKey, 16);
+      |                                            ^~~~~~~~~~~~~
+      |                                            encryption_key
+../Core/Src/main.c:97:44: note: each undeclared identifier is reported only once for each function it appears in
+make: *** [Core/Src/subdir.mk:43: Core/Src/main.o] Error 1
+make: *** Waiting for unfinished jobs....
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:300:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  300 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+../Core/Src/secure_uart.c:300:28: error: 'fresh_ctx' undeclared (first use in this function)
+  300 |             Speck_Decrypt(&fresh_ctx,
+      |                            ^~~~~~~~~
+../Core/Src/secure_uart.c:300:28: note: each undeclared identifier is reported only once for each function it appears in
+make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:45:31 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:300:32: error: 'encryptionKey' undeclared (first use in this function)
+  300 |         Speck_Init(&fresh_ctx, encryptionKey); // Using global encryptionKey directly
+      |                                ^~~~~~~~~~~~~
+../Core/Src/secure_uart.c:300:32: note: each undeclared identifier is reported only once for each function it appears in
+../Core/Src/secure_uart.c:304:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  304 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+make: *** Waiting for unfinished jobs....
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:45:52 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:301:32: error: 'encryptionKey' undeclared (first use in this function)
+  301 |         Speck_Init(&fresh_ctx, encryptionKey); // Using global encryptionKey directly
+      |                                ^~~~~~~~~~~~~
+../Core/Src/secure_uart.c:301:32: note: each undeclared identifier is reported only once for each function it appears in
+../Core/Src/secure_uart.c:305:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  305 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:45:58 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:305:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  305 |             Speck_Decrypt(&fresh_ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:35: multiple definition of `huart1'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:35: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:36: multiple definition of `huart2'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:36: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:37: multiple definition of `huart6'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:37: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:38: multiple definition of `hdma_usart1_rx'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:38: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:39: multiple definition of `hdma_usart1_tx'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:39: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:40: multiple definition of `hdma_usart6_rx'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:40: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:41: multiple definition of `hdma_usart6_tx'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:41: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:44: multiple definition of `TxContext'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:44: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:45: multiple definition of `RxContext'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:45: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:47: multiple definition of `encryptionKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:47: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:52: multiple definition of `macKey'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:52: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o:D:/diploma/inter/Debug/../Core/Src/main.c:57: multiple definition of `testData'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:57: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `HAL_UART_RxCpltCallback':
+D:/diploma/inter/Debug/../Core/Src/main.c:78: multiple definition of `HAL_UART_RxCpltCallback'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:78: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `TestDecryption':
+D:/diploma/inter/Debug/../Core/Src/main.c:87: multiple definition of `TestDecryption'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:87: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `main':
+D:/diploma/inter/Debug/../Core/Src/main.c:121: multiple definition of `main'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:121: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `SystemClock_Config':
+D:/diploma/inter/Debug/../Core/Src/main.c:200: multiple definition of `SystemClock_Config'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:200: first defined here
+C:/ST/STM32CubeIDE_1.18.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: ./Core/Src/secure_uart.o: in function `Error_Handler':
+D:/diploma/inter/Debug/../Core/Src/main.c:333: multiple definition of `Error_Handler'; ./Core/Src/main.o:D:/diploma/inter/Debug/../Core/Src/main.c:333: first defined here
+collect2.exe: error: ld returned 1 exit status
+make: *** [makefile:64: inter.elf] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:46:45 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:300:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  300 |             Speck_Decrypt(ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  28396	    156	   3092	  31644	   7b9c	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+13:46:47 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-size  inter.elf 
+   text	   data	    bss	    dec	    hex	filename
+  28396	    156	   3092	  31644	   7b9c	inter.elf
+Finished building: default.size.stdout
+ 
+13:47:05 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-size  inter.elf 
+   text	   data	    bss	    dec	    hex	filename
+  28396	    156	   3092	  31644	   7b9c	inter.elf
+Finished building: default.size.stdout
+ 
+13:54:04 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  28520	    156	   3092	  31768	   7c18	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+13:55:24 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_Send':
+../Core/Src/secure_uart.c:153:32: error: 'huart2' undeclared (first use in this function)
+  153 |         SecureUart_DebugPrint(&huart2, "Операция заняла %lu тактов\r\n", cycles);
+      |                                ^~~~~~
+../Core/Src/secure_uart.c:153:32: note: each undeclared identifier is reported only once for each function it appears in
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:302:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  302 |             Speck_Decrypt(ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+make: *** [Core/Src/subdir.mk:43: Core/Src/secure_uart.o] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:55:41 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/secure_uart.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F411xE -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/secure_uart.d" -MT"Core/Src/secure_uart.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/secure_uart.o"
+../Core/Src/secure_uart.c: In function 'SecureUart_ProcessReceivedData':
+../Core/Src/secure_uart.c:302:13: warning: implicit declaration of function 'Speck_Decrypt'; did you mean 'Speck_Encrypt'? [-Wimplicit-function-declaration]
+  302 |             Speck_Decrypt(ctx,
+      |             ^~~~~~~~~~~~~
+      |             Speck_Encrypt
+arm-none-eabi-gcc -o "inter.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\diploma\inter\STM32F411RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="inter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: inter.elf
+ 
+arm-none-eabi-size  inter.elf 
+arm-none-eabi-objdump -h -S inter.elf  > "inter.list"
+   text	   data	    bss	    dec	    hex	filename
+  28628	    156	   3092	  31876	   7c84	inter.elf
+Finished building: default.size.stdout
+ 
+Finished building: inter.list
+ 
+13:55:44 **** Incremental Build of configuration Debug for project inter ****
+make -j8 all 
+arm-none-eabi-size  inter.elf 
+   text	   data	    bss	    dec	    hex	filename
+  28628	    156	   3092	  31876	   7c84	inter.elf
+Finished building: default.size.stdout
+ 

@@ -4,6 +4,7 @@
  */
 
 #include "secure_uart.h"
+#include "main.c"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -146,11 +147,9 @@ SecureUartStatus SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, ui
         // Отладочный вывод исходных данных
         SecureUart_DebugPrint(ctx->debug_uart, "Исходные данные перед шифрованием:\r\n");
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Оригинал: ", data, length);
-        uint32_t start = DWT->CYCCNT;
+
         // Шифрование данных (используем Simple версию)
         size_t enc_length = Speck_Encrypt_Simple(&ctx->speck_ctx, data, length, encrypted_data);
-        uint32_t cycles = DWT->CYCCNT - start;
-        SecureUart_DebugPrint(ctx->debug_uart, "Операция заняла %lu тактов\r\n", cycles);
 
         // Обновляем указатель на данные и длину
         data = encrypted_data;
@@ -297,9 +296,13 @@ SecureUartStatus SecureUart_ProcessReceivedData(SecureUartContext *ctx, SecureUa
         SecureUart_DebugPrint(ctx->debug_uart, "Зашифрованные данные (длина=%u):\r\n", data_length);
         SecureUart_PrintHexBuffer(ctx->debug_uart, "Шифротекст: ", received_data, data_length);
 
+        // Create a fresh context for decryption using the same key
+        SpeckContext fresh_ctx;
+        Speck_Init(&fresh_ctx, encryptionKey); // Using global encryptionKey directly
+
         // Decrypt block by block directly
         for (size_t i = 0; i < data_length / SPECK_BLOCK_SIZE; i++) {
-            Speck_Decrypt(ctx,
+            Speck_Decrypt(&fresh_ctx,
                          received_data + i * SPECK_BLOCK_SIZE,
                          packet->data + i * SPECK_BLOCK_SIZE);
         }

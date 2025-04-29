@@ -145,11 +145,6 @@ int main(void)
     MX_USART1_UART_Init();
     MX_USART2_UART_Init();
     MX_USART6_UART_Init();
-
-    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-    DWT->CYCCNT = 0;
-    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-
     /* USER CODE BEGIN 2 */
     // Инициализация контекстов защищенного UART
     SecureUart_Init(&TxContext, &huart1, &huart2);
@@ -188,14 +183,8 @@ int main(void)
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
-    	uint32_t start = DWT->CYCCNT;
-
         // Отправка тестового сообщения
         SecureUart_Send(&TxContext, testData, strlen((char*)testData));
-
-        uint32_t cycles = DWT->CYCCNT - start;
-
-    	SecureUart_DebugPrint(&huart2, "Операция заняла %lu тактов\r\n", cycles);
 
         // Задержка 20 секунд между отправками
         HAL_Delay(200000);
