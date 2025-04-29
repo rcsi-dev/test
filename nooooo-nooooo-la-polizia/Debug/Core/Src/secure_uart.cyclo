@@ -3,9 +3,9 @@
 ../Core/Src/secure_uart.c:93:14:SecUart_Send	8
 ../Core/Src/secure_uart.c:162:13:SecUart_PrepareFrame	2
 ../Core/Src/secure_uart.c:193:14:SecUart_ProcessRxData	12
-../Core/Src/secure_uart.c:292:6:SecUart_RxIdleCallback	3
-../Core/Src/secure_uart.c:320:6:SecUart_Log	4
-../Core/Src/secure_uart.c:331:13:SecUart_EncryptBlock	15
-../Core/Src/secure_uart.c:399:13:SecUart_DecryptBlock	15
-../Core/Src/secure_uart.c:467:13:SecUart_CalculateMAC	1
-../Core/Src/secure_uart.c:474:13:SecUart_VerifyMAC	1
+../Core/Src/secure_uart.c:292:6:SecUart_RxIdleCallback	4
+../Core/Src/secure_uart.c:328:6:SecUart_Log	4
+../Core/Src/secure_uart.c:339:13:SecUart_EncryptBlock	15
+../Core/Src/secure_uart.c:407:13:SecUart_DecryptBlock	15
+../Core/Src/secure_uart.c:475:13:SecUart_CalculateMAC	1
+../Core/Src/secure_uart.c:482:13:SecUart_VerifyMAC	1
