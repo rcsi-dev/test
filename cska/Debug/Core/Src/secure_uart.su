@@ -1,8 +1,0 @@
-../Core/Src/secure_uart.c:13:6:secure_uart_init	24	static
-../Core/Src/secure_uart.c:31:6:secure_uart_send	32	static
-../Core/Src/secure_uart.c:43:6:secure_uart_process_received	240	static
-../Core/Src/secure_uart.c:215:6:secure_uart_handle_idle	24	static
-../Core/Src/secure_uart.c:224:13:secure_uart_encrypt_data	48	static
-../Core/Src/secure_uart.c:255:16:secure_uart_decrypt_data	48	static
-../Core/Src/secure_uart.c:282:13:secure_uart_calculate_cmac	200	static
-../Core/Src/secure_uart.c:316:17:secure_uart_prepare_frame	152	static

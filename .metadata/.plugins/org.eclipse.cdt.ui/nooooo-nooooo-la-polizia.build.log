@@ -1,0 +1,10 @@
+00:43:17 **** Incremental Build of configuration Debug for project nooooo-nooooo-la-polizia ****
+make -j8 all 
+arm-none-eabi-size  nooooo-nooooo-la-polizia.elf 
+   text	   data	    bss	    dec	    hex	filename
+  24268	     92	   3292	  27652	   6c04	nooooo-nooooo-la-polizia.elf
+Finished building: default.size.stdout
+ 
+
+00:43:18 Build Finished. 0 errors, 0 warnings. (took 199ms)
+

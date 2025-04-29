@@ -1,0 +1,414 @@
+#include "uart_secure.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/**
+ * @brief Инициализация защищенного UART
+ */
+void secure_uart_init(
+    SecureUartHandle *handle,
+    UART_HandleTypeDef *huart_tx,
+    UART_HandleTypeDef *huart_rx,
+    UART_HandleTypeDef *huart_monitor,
+    const uint32_t *key
+) {
+    // Инициализируем контекст шифрования
+    speck_init(&handle->speck_ctx, key);
+
+    // Инициализируем счетчики
+    handle->counter_tx = 0;
+    handle->counter_rx_last = 0;
+
+    // Сохраняем хендлеры UART
+    handle->huart_tx = huart_tx;
+    handle->huart_rx = huart_rx;
+    handle->huart_monitor = huart_monitor;
+
+    // Инициализируем состояние приема
+    handle->rx_count = 0;
+    handle->frame_received = false;
+    handle->rx_state = SECURE_UART_STATE_WAIT_STX;
+
+    // Выводим информацию об инициализации в монитор
+    char log_msg[] = "Инициализация защищенного UART протокола\r\n";
+    HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+    // Запускаем прием
+    secure_uart_start_receive(handle);
+}
+
+/**
+ * @brief Отправка данных через защищенный UART
+ */
+bool secure_uart_send(SecureUartHandle *handle, const uint8_t *data, uint16_t length) {
+    if (length > SECURE_UART_MAX_DATA_SIZE) {
+        char log_msg[100];
+        sprintf(log_msg, "Ошибка: данные слишком большие (%u байт)\r\n", length);
+        HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+        return false;
+    }
+
+    // 1. Подготовка буфера для отправки
+    uint8_t *buf = handle->tx_buffer;
+    uint16_t pos = 0;
+
+    // Добавляем STX
+    buf[pos++] = SECURE_UART_STX;
+
+    // Добавляем длину данных (2 байта, big-endian)
+    buf[pos++] = (length >> 8) & 0xFF;
+    buf[pos++] = length & 0xFF;
+
+    // Добавляем счетчик (4 байта, big-endian) для защиты от replay-атак
+    uint32_t counter = handle->counter_tx++;
+    buf[pos++] = (counter >> 24) & 0xFF;
+    buf[pos++] = (counter >> 16) & 0xFF;
+    buf[pos++] = (counter >> 8) & 0xFF;
+    buf[pos++] = counter & 0xFF;
+
+    // 2. Шифрование данных блоками по 8 байт (64 бит)
+    size_t full_blocks = length / 8;  // Количество полных блоков
+    size_t remaining = length % 8;    // Оставшиеся байты
+
+    // Шифруем полные блоки
+    for (size_t i = 0; i < full_blocks; i++) {
+        uint32_t block[2];
+
+        // Преобразуем 8 байт в два 32-битных слова (big-endian)
+        block[0] = ((uint32_t)data[i*8] << 24) |
+                  ((uint32_t)data[i*8+1] << 16) |
+                  ((uint32_t)data[i*8+2] << 8) |
+                  data[i*8+3];
+
+        block[1] = ((uint32_t)data[i*8+4] << 24) |
+                  ((uint32_t)data[i*8+5] << 16) |
+                  ((uint32_t)data[i*8+6] << 8) |
+                  data[i*8+7];
+
+        // Шифруем блок
+        speck_encrypt(&handle->speck_ctx, block);
+
+        // Добавляем зашифрованный блок в буфер
+        buf[pos++] = (block[0] >> 24) & 0xFF;
+        buf[pos++] = (block[0] >> 16) & 0xFF;
+        buf[pos++] = (block[0] >> 8) & 0xFF;
+        buf[pos++] = block[0] & 0xFF;
+
+        buf[pos++] = (block[1] >> 24) & 0xFF;
+        buf[pos++] = (block[1] >> 16) & 0xFF;
+        buf[pos++] = (block[1] >> 8) & 0xFF;
+        buf[pos++] = block[1] & 0xFF;
+    }
+
+    // Обрабатываем оставшиеся байты, если есть
+    if (remaining > 0) {
+        uint32_t block[2] = {0, 0}; // Инициализируем нулями для дополнения блока
+
+        // Заполняем блок оставшимися данными
+        for (size_t i = 0; i < remaining; i++) {
+            if (i < 4) {
+                block[0] |= (uint32_t)data[full_blocks*8 + i] << (24 - i*8);
+            } else {
+                block[1] |= (uint32_t)data[full_blocks*8 + i] << (24 - (i-4)*8);
+            }
+        }
+
+        // Шифруем неполный блок
+        speck_encrypt(&handle->speck_ctx, block);
+
+        // Добавляем зашифрованный блок в буфер
+        buf[pos++] = (block[0] >> 24) & 0xFF;
+        buf[pos++] = (block[0] >> 16) & 0xFF;
+        buf[pos++] = (block[0] >> 8) & 0xFF;
+        buf[pos++] = block[0] & 0xFF;
+
+        buf[pos++] = (block[1] >> 24) & 0xFF;
+        buf[pos++] = (block[1] >> 16) & 0xFF;
+        buf[pos++] = (block[1] >> 8) & 0xFF;
+        buf[pos++] = block[1] & 0xFF;
+    }
+
+    // 3. Вычисляем MAC для данных + счетчика (для аутентификации)
+    // Создаем буфер: счетчик (4 байта) + данные
+    uint8_t *mac_data = (uint8_t*)malloc(4 + length);
+    if (mac_data == NULL) {
+        char log_msg[] = "Ошибка: не удалось выделить память для MAC\r\n";
+        HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+        return false;
+    }
+
+    // Заполняем буфер MAC: счетчик + данные
+    mac_data[0] = (counter >> 24) & 0xFF;
+    mac_data[1] = (counter >> 16) & 0xFF;
+    mac_data[2] = (counter >> 8) & 0xFF;
+    mac_data[3] = counter & 0xFF;
+    memcpy(mac_data + 4, data, length);
+
+    // Вычисляем MAC
+    uint8_t mac[SECURE_UART_MAC_SIZE];
+    speck_mac(&handle->speck_ctx, mac_data, 4 + length, mac);
+    free(mac_data); // Освобождаем временный буфер
+
+    // Добавляем MAC в буфер
+    for (int i = 0; i < SECURE_UART_MAC_SIZE; i++) {
+        buf[pos++] = mac[i];
+    }
+
+    // Добавляем ETX
+    buf[pos++] = SECURE_UART_ETX;
+
+    // 4. Отправляем данные через UART
+    char log_msg[100];
+    sprintf(log_msg, "Отправка: %u байт данных, счетчик: %lu\r\n", length, (unsigned long)counter);
+    HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+    HAL_StatusTypeDef status = HAL_UART_Transmit(handle->huart_tx, buf, pos, HAL_MAX_DELAY);
+
+    return (status == HAL_OK);
+}
+
+/**
+ * @brief Начало приема данных в режиме DMA
+ */
+void secure_uart_start_receive(SecureUartHandle *handle) {
+    // Включаем прерывание по IDLE
+    __HAL_UART_ENABLE_IT(handle->huart_rx, UART_IT_IDLE);
+
+    // Запускаем прием данных в режиме DMA
+    HAL_UART_Receive_DMA(handle->huart_rx, handle->rx_buffer, SECURE_UART_MAX_FRAME_SIZE);
+}
+
+/**
+ * @brief Обработчик IDLE прерывания UART
+ */
+void secure_uart_idle_callback(SecureUartHandle *handle) {
+    // Проверяем, что это действительно IDLE прерывание
+    if (__HAL_UART_GET_FLAG(handle->huart_rx, UART_FLAG_IDLE)) {
+        // Сбрасываем флаг IDLE
+        __HAL_UART_CLEAR_IDLEFLAG(handle->huart_rx);
+
+        // Останавливаем DMA
+        HAL_UART_DMAStop(handle->huart_rx);
+
+        // Вычисляем количество полученных данных
+        handle->rx_count = SECURE_UART_MAX_FRAME_SIZE - __HAL_DMA_GET_COUNTER(handle->huart_rx->hdmarx);
+
+        // Отмечаем, что фрейм получен
+        if (handle->rx_count > 0) {
+            handle->frame_received = true;
+
+            char log_msg[100];
+            sprintf(log_msg, "Получено %u байт данных\r\n", handle->rx_count);
+            HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+        }
+    }
+}
+
+/**
+ * @brief Обработка принятых данных
+ */
+bool secure_uart_process_received_data(SecureUartHandle *handle, uint8_t **data, uint16_t *length) {
+    if (!handle->frame_received) {
+        return false;
+    }
+
+    uint8_t *buf = handle->rx_buffer;
+    uint16_t pos = 0;
+
+    // Ищем STX в начале фрейма
+    while (pos < handle->rx_count && buf[pos] != SECURE_UART_STX) {
+        pos++;
+    }
+
+    if (pos == handle->rx_count || handle->rx_count - pos < SECURE_UART_HEADER_SIZE + SECURE_UART_FOOTER_SIZE) {
+        // STX не найден или фрейм слишком короткий
+        char log_msg[] = "Ошибка: некорректный формат фрейма\r\n";
+        HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+        handle->frame_received = false;
+        secure_uart_start_receive(handle);
+        return false;
+    }
+
+    // Смещаемся после STX
+    pos++;
+
+    // Извлекаем длину данных
+    uint16_t data_len = ((uint16_t)buf[pos] << 8) | buf[pos + 1];
+    pos += 2;
+
+    // Проверяем размер фрейма
+    if (data_len > SECURE_UART_MAX_DATA_SIZE ||
+        pos + 4 + data_len + SECURE_UART_MAC_SIZE + 1 > handle->rx_count) {
+        char log_msg[] = "Ошибка: недопустимый размер данных\r\n";
+        HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+        handle->frame_received = false;
+        secure_uart_start_receive(handle);
+        return false;
+    }
+
+    // Извлекаем счетчик
+    uint32_t counter = ((uint32_t)buf[pos] << 24) |
+                      ((uint32_t)buf[pos+1] << 16) |
+                      ((uint32_t)buf[pos+2] << 8) |
+                      buf[pos+3];
+    pos += 4;
+
+    // Проверяем счетчик для защиты от replay-атак
+    if (counter <= handle->counter_rx_last) {
+        char log_msg[100];
+        sprintf(log_msg, "Предупреждение: возможная Replay-атака (счетчик: %lu, последний: %lu)\r\n",
+                (unsigned long)counter, (unsigned long)handle->counter_rx_last);
+        HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+        handle->frame_received = false;
+        secure_uart_start_receive(handle);
+        return false;
+    }
+
+    // Получаем указатель на зашифрованные данные
+    uint8_t *encrypted_data = &buf[pos];
+    pos += data_len;
+
+    // Получаем указатель на MAC
+    uint8_t *received_mac = &buf[pos];
+    pos += SECURE_UART_MAC_SIZE;
+
+    // Проверяем ETX в конце фрейма
+    if (buf[pos] != SECURE_UART_ETX) {
+        char log_msg[] = "Ошибка: отсутствует ETX в конце фрейма\r\n";
+        HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+        handle->frame_received = false;
+        secure_uart_start_receive(handle);
+        return false;
+    }
+
+    // Выделяем память для расшифрованных данных
+    *data = (uint8_t*)malloc(data_len);
+    if (*data == NULL) {
+        char log_msg[] = "Ошибка: не удалось выделить память для расшифрованных данных\r\n";
+        HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+        handle->frame_received = false;
+        secure_uart_start_receive(handle);
+        return false;
+    }
+
+    // Расшифровываем данные блоками по 8 байт (64 бит)
+    uint16_t full_blocks = data_len / 8;
+    uint16_t remaining = data_len % 8;
+
+    for (uint16_t i = 0; i < full_blocks; i++) {
+        uint32_t block[2];
+
+        // Извлекаем зашифрованный блок
+        block[0] = ((uint32_t)encrypted_data[i*8] << 24) |
+                  ((uint32_t)encrypted_data[i*8 + 1] << 16) |
+                  ((uint32_t)encrypted_data[i*8 + 2] << 8) |
+                  encrypted_data[i*8 + 3];
+
+        block[1] = ((uint32_t)encrypted_data[i*8 + 4] << 24) |
+                  ((uint32_t)encrypted_data[i*8 + 5] << 16) |
+                  ((uint32_t)encrypted_data[i*8 + 6] << 8) |
+                  encrypted_data[i*8 + 7];
+
+        // Расшифровываем блок
+        speck_decrypt(&handle->speck_ctx, block);
+
+        // Преобразуем обратно в байты
+        (*data)[i*8] = (block[0] >> 24) & 0xFF;
+        (*data)[i*8 + 1] = (block[0] >> 16) & 0xFF;
+        (*data)[i*8 + 2] = (block[0] >> 8) & 0xFF;
+        (*data)[i*8 + 3] = block[0] & 0xFF;
+
+        (*data)[i*8 + 4] = (block[1] >> 24) & 0xFF;
+        (*data)[i*8 + 5] = (block[1] >> 16) & 0xFF;
+        (*data)[i*8 + 6] = (block[1] >> 8) & 0xFF;
+        (*data)[i*8 + 7] = block[1] & 0xFF;
+    }
+
+    // Обрабатываем оставшиеся байты, если есть
+    if (remaining > 0) {
+        uint32_t block[2];
+
+        // Извлекаем зашифрованный блок
+        block[0] = ((uint32_t)encrypted_data[full_blocks*8] << 24) |
+                  ((uint32_t)encrypted_data[full_blocks*8 + 1] << 16) |
+                  ((uint32_t)encrypted_data[full_blocks*8 + 2] << 8) |
+                  encrypted_data[full_blocks*8 + 3];
+
+        block[1] = ((uint32_t)encrypted_data[full_blocks*8 + 4] << 24) |
+                  ((uint32_t)encrypted_data[full_blocks*8 + 5] << 16) |
+                  ((uint32_t)encrypted_data[full_blocks*8 + 6] << 8) |
+                  encrypted_data[full_blocks*8 + 7];
+
+        // Расшифровываем блок
+        speck_decrypt(&handle->speck_ctx, block);
+
+        // Копируем только нужное количество байт из расшифрованного блока
+        for (uint16_t i = 0; i < remaining; i++) {
+            if (i < 4) {
+                (*data)[full_blocks*8 + i] = (block[0] >> (24 - i*8)) & 0xFF;
+            } else {
+                (*data)[full_blocks*8 + i] = (block[1] >> (24 - (i-4)*8)) & 0xFF;
+            }
+        }
+    }
+
+    // Проверяем MAC
+    // Создаем буфер: счетчик (4 байта) + расшифрованные данные
+    uint8_t *mac_data = (uint8_t*)malloc(4 + data_len);
+    if (mac_data == NULL) {
+        free(*data);
+        *data = NULL;
+
+        char log_msg[] = "Ошибка: не удалось выделить память для проверки MAC\r\n";
+        HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+        handle->frame_received = false;
+        secure_uart_start_receive(handle);
+        return false;
+    }
+
+    // Заполняем буфер для вычисления MAC: счетчик + расшифрованные данные
+    mac_data[0] = (counter >> 24) & 0xFF;
+    mac_data[1] = (counter >> 16) & 0xFF;
+    mac_data[2] = (counter >> 8) & 0xFF;
+    mac_data[3] = counter & 0xFF;
+    memcpy(mac_data + 4, *data, data_len);
+
+    // Вычисляем ожидаемый MAC
+    uint8_t expected_mac[SECURE_UART_MAC_SIZE];
+    speck_mac(&handle->speck_ctx, mac_data, 4 + data_len, expected_mac);
+    free(mac_data);
+
+    // Сравниваем полученный и ожидаемый MAC
+    if (memcmp(received_mac, expected_mac, SECURE_UART_MAC_SIZE) != 0) {
+        free(*data);
+        *data = NULL;
+
+        char log_msg[] = "Ошибка: недействительный MAC\r\n";
+        HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+        handle->frame_received = false;
+        secure_uart_start_receive(handle);
+        return false;
+    }
+
+    // MAC верный, фрейм принят успешно
+    *length = data_len;
+    handle->counter_rx_last = counter; // Обновляем последний счетчик
+
+    char log_msg[100];
+    sprintf(log_msg, "Фрейм успешно расшифрован: %u байт данных, счетчик: %lu\r\n",
+            *length, (unsigned long)counter);
+    HAL_UART_Transmit(handle->huart_monitor, (uint8_t*)log_msg, strlen(log_msg), HAL_MAX_DELAY);
+
+    handle->frame_received = false;
+    secure_uart_start_receive(handle);
+
+    return true;
+}

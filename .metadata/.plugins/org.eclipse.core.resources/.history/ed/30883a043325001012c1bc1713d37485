@@ -1,0 +1,391 @@
+/**
+ * @file secure_uart.c
+ * @brief Защищенный протокол передачи данных поверх UART
+ */
+
+#include "secure_uart.h"
+#include "speck.h"
+#include "speck_cmac.h"
+#include <string.h>
+#include <stdio.h>
+
+/**
+ * @brief Магическое число для идентификации фрейма
+ */
+static const uint8_t SECURE_UART_MAGIC[2] = {0xA5, 0x5A};
+
+/**
+ * @brief Версия протокола
+ */
+static const uint8_t SECURE_UART_VERSION = 0x01;
+
+/**
+ * @brief Вычисление MAC для фрейма
+ *
+ * @param ctx Указатель на контекст
+ * @param frame Указатель на фрейм
+ * @param mac Указатель для записи результата
+ */
+static void secure_uart_compute_mac(
+    SecureUartContext *ctx,
+    const SecureUartFrame *frame,
+    uint8_t *mac
+) {
+    // Вычисляем MAC для всего фрейма, кроме поля MAC
+    size_t data_to_auth_size = offsetof(SecureUartFrame, mac);
+    speck_cmac(ctx->auth_key, (const uint8_t *)frame, data_to_auth_size, mac);
+}
+
+/**
+ * @brief Шифрование данных во фрейме
+ *
+ * @param ctx Указатель на контекст
+ * @param frame Указатель на фрейм
+ */
+static void secure_uart_encrypt_frame(
+    SecureUartContext *ctx,
+    SecureUartFrame *frame
+) {
+    uint32_t scheduled_keys[SPECK_ROUNDS];
+    speck_init(ctx->encrypt_key, scheduled_keys);
+
+    // Определяем количество полных блоков
+    size_t blocks = (frame->data_size + SPECK_BLOCK_SIZE - 1) / SPECK_BLOCK_SIZE;
+
+    // Шифруем каждый блок
+    for (size_t i = 0; i < blocks; i++) {
+        size_t offset = i * SPECK_BLOCK_SIZE;
+        size_t remaining = frame->data_size - offset;
+        size_t block_size = (remaining < SPECK_BLOCK_SIZE) ? remaining : SPECK_BLOCK_SIZE;
+
+        uint8_t plaintext[SPECK_BLOCK_SIZE] = {0};
+        uint8_t ciphertext[SPECK_BLOCK_SIZE];
+
+        // Копируем данные в буфер блока
+        memcpy(plaintext, frame->data + offset, block_size);
+
+        // Шифруем блок
+        speck_encrypt(scheduled_keys, plaintext, ciphertext);
+
+        // Записываем результат обратно во фрейм
+        memcpy(frame->data + offset, ciphertext, block_size);
+    }
+}
+
+/**
+ * @brief Дешифрование данных во фрейме
+ *
+ * @param ctx Указатель на контекст
+ * @param frame Указатель на фрейм
+ */
+static void secure_uart_decrypt_frame(
+    SecureUartContext *ctx,
+    SecureUartFrame *frame
+) {
+    uint32_t scheduled_keys[SPECK_ROUNDS];
+    speck_init(ctx->encrypt_key, scheduled_keys);
+
+    // Определяем количество полных блоков
+    size_t blocks = (frame->data_size + SPECK_BLOCK_SIZE - 1) / SPECK_BLOCK_SIZE;
+
+    // Дешифруем каждый блок
+    for (size_t i = 0; i < blocks; i++) {
+        size_t offset = i * SPECK_BLOCK_SIZE;
+        size_t remaining = frame->data_size - offset;
+        size_t block_size = (remaining < SPECK_BLOCK_SIZE) ? remaining : SPECK_BLOCK_SIZE;
+
+        uint8_t ciphertext[SPECK_BLOCK_SIZE] = {0};
+        uint8_t plaintext[SPECK_BLOCK_SIZE];
+
+        // Копируем данные в буфер блока
+        memcpy(ciphertext, frame->data + offset, block_size);
+
+        // Дешифруем блок
+        speck_decrypt(scheduled_keys, ciphertext, plaintext);
+
+        // Записываем результат обратно во фрейм
+        memcpy(frame->data + offset, plaintext, block_size);
+    }
+}
+
+/**
+ * @brief Формирование фрейма для отправки
+ *
+ * @param ctx Указатель на контекст
+ * @param data Указатель на данные
+ * @param data_size Размер данных
+ * @param frame Указатель на фрейм для заполнения
+ * @return int 1 если успешно, 0 в случае ошибки
+ */
+static int secure_uart_prepare_frame(
+    SecureUartContext *ctx,
+    const uint8_t *data,
+    uint16_t data_size,
+    SecureUartFrame *frame
+) {
+    // Проверка размера данных
+    if (data_size > SECURE_UART_MAX_DATA_SIZE) {
+        return 0;
+    }
+
+    // Заполнение заголовка
+    frame->magic[0] = SECURE_UART_MAGIC[0];
+    frame->magic[1] = SECURE_UART_MAGIC[1];
+    frame->version = SECURE_UART_VERSION;
+    frame->flags = 0;
+    frame->data_size = data_size;
+    frame->frame_size = sizeof(SecureUartFrame) - (SECURE_UART_MAX_DATA_SIZE - data_size);
+
+    // Установка счетчика
+    frame->counter = ctx->tx_counter++;
+
+    // Копирование данных
+    memcpy(frame->data, data, data_size);
+
+    // Шифрование данных
+    secure_uart_encrypt_frame(ctx, frame);
+
+    // Вычисление MAC
+    secure_uart_compute_mac(ctx, frame, frame->mac);
+
+    return 1;
+}
+
+/**
+ * @brief Проверка и обработка принятого фрейма
+ *
+ * @param ctx Указатель на контекст
+ * @param frame Указатель на принятый фрейм
+ * @param data Указатель для записи расшифрованных данных
+ * @param data_size Указатель для записи размера данных
+ * @return SecureUartError Код ошибки
+ */
+static SecureUartError secure_uart_process_frame(
+    SecureUartContext *ctx,
+    const SecureUartFrame *frame,
+    uint8_t *data,
+    uint16_t *data_size
+) {
+    char debug_buf[64];
+
+    // Проверка магического числа
+    if (frame->magic[0] != SECURE_UART_MAGIC[0] || frame->magic[1] != SECURE_UART_MAGIC[1]) {
+        snprintf(debug_buf, sizeof(debug_buf), "Ошибка: неверное магическое число %02X%02X",
+                 frame->magic[0], frame->magic[1]);
+        secure_uart_debug(ctx, debug_buf);
+        return SECURE_UART_ERROR_SIZE;
+    }
+
+    // Проверка версии протокола
+    if (frame->version != SECURE_UART_VERSION) {
+        snprintf(debug_buf, sizeof(debug_buf), "Ошибка: неверная версия протокола %d", frame->version);
+        secure_uart_debug(ctx, debug_buf);
+        return SECURE_UART_ERROR_SIZE;
+    }
+
+    // Проверка размера фрейма и данных
+    if (frame->data_size > SECURE_UART_MAX_DATA_SIZE ||
+        frame->frame_size != sizeof(SecureUartFrame) - (SECURE_UART_MAX_DATA_SIZE - frame->data_size)) {
+        snprintf(debug_buf, sizeof(debug_buf), "Ошибка: неверный размер данных %d или фрейма %d",
+                 frame->data_size, frame->frame_size);
+        secure_uart_debug(ctx, debug_buf);
+        return SECURE_UART_ERROR_SIZE;
+    }
+
+    // Проверка MAC
+    uint8_t calculated_mac[SPECK_CMAC_SIZE];
+    secure_uart_compute_mac(ctx, frame, calculated_mac);
+
+    if (memcmp(calculated_mac, frame->mac, SPECK_CMAC_SIZE) != 0) {
+        secure_uart_debug(ctx, "Ошибка: неверный MAC");
+        return SECURE_UART_ERROR_MAC;
+    }
+
+    // Проверка счетчика (защита от Replay-атак)
+    if (frame->counter <= ctx->rx_counter) {
+        snprintf(debug_buf, sizeof(debug_buf), "Ошибка: обнаружена Replay-атака, счетчик %lu <= %lu",
+                 frame->counter, ctx->rx_counter);
+        secure_uart_debug(ctx, debug_buf);
+        return SECURE_UART_ERROR_REPLAY;
+    }
+
+    // Обновление счетчика
+    ctx->rx_counter = frame->counter;
+
+    // Создаем копию фрейма для дешифрования, чтобы не модифицировать оригинал
+    SecureUartFrame decrypted_frame;
+    memcpy(&decrypted_frame, frame, sizeof(SecureUartFrame));
+
+    // Дешифрование данных
+    secure_uart_decrypt_frame(ctx, &decrypted_frame);
+
+    // Копирование расшифрованных данных
+    memcpy(data, decrypted_frame.data, decrypted_frame.data_size);
+    *data_size = decrypted_frame.data_size;
+
+    snprintf(debug_buf, sizeof(debug_buf), "Успешно принят фрейм со счетчиком %lu, размер данных %d",
+             frame->counter, frame->data_size);
+    secure_uart_debug(ctx, debug_buf);
+
+    return SECURE_UART_OK;
+}
+
+void secure_uart_init(
+    SecureUartContext *ctx,
+    UART_HandleTypeDef *huart_tx,
+    UART_HandleTypeDef *huart_rx,
+    UART_HandleTypeDef *huart_monitor,
+    const uint8_t *encrypt_key,
+    const uint8_t *auth_key
+) {
+    // Инициализация UART
+    ctx->huart_tx = huart_tx;
+    ctx->huart_rx = huart_rx;
+    ctx->huart_monitor = huart_monitor;
+
+    // Инициализация ключей
+    memcpy(ctx->encrypt_key, encrypt_key, SPECK_KEY_SIZE);
+    memcpy(ctx->auth_key, auth_key, SPECK_KEY_SIZE);
+
+    // Сброс счетчиков
+    ctx->tx_counter = 0;
+    ctx->rx_counter = 0;
+
+    // Сброс флагов состояния
+    ctx->rx_complete = 0;
+    ctx->tx_complete = 0;
+    ctx->tx_busy = 0;
+
+    // Очистка буферов
+    memset(ctx->tx_buffer, 0, sizeof(ctx->tx_buffer));
+    memset(ctx->rx_buffer, 0, sizeof(ctx->rx_buffer));
+
+    // Настройка UART для приема по DMA с обнаружением IDLE
+    __HAL_UART_ENABLE_IT(ctx->huart_rx, UART_IT_IDLE);
+    HAL_UART_Receive_DMA(ctx->huart_rx, ctx->rx_buffer, sizeof(ctx->rx_buffer));
+
+    secure_uart_debug(ctx, "Инициализация защищенного UART завершена");
+}
+
+SecureUartError secure_uart_send(
+    SecureUartContext *ctx,
+    const uint8_t *data,
+    uint16_t data_size
+) {
+    // Проверка состояния
+    if (ctx->tx_busy) {
+        return SECURE_UART_ERROR_BUSY;
+    }
+
+    // Установка флага занятости
+    ctx->tx_busy = 1;
+
+    // Формирование фрейма
+    SecureUartFrame frame;
+    if (!secure_uart_prepare_frame(ctx, data, data_size, &frame)) {
+        ctx->tx_busy = 0;
+        return SECURE_UART_ERROR_SIZE;
+    }
+
+    // Копирование фрейма в буфер передачи
+    memcpy(ctx->tx_buffer, &frame, frame.frame_size);
+
+    // Отладочное сообщение
+    char debug_buf[64];
+    snprintf(debug_buf, sizeof(debug_buf), "Отправка фрейма, счетчик: %lu, размер данных: %d",
+             frame.counter, frame.data_size);
+    secure_uart_debug(ctx, debug_buf);
+
+    // Отправка фрейма по DMA
+    HAL_UART_Transmit_DMA(ctx->huart_tx, ctx->tx_buffer, frame.frame_size);
+
+    // Ожидание завершения передачи
+    uint32_t timeout = HAL_GetTick() + 1000;  // 1 секунда таймаут
+    while (!ctx->tx_complete && HAL_GetTick() < timeout) {
+        HAL_Delay(1);
+    }
+
+    // Проверка таймаута
+    if (!ctx->tx_complete) {
+        ctx->tx_busy = 0;
+        secure_uart_debug(ctx, "Ошибка: таймаут при отправке");
+        return SECURE_UART_ERROR_TIMEOUT;
+    }
+
+    // Сброс флага завершения передачи
+    ctx->tx_complete = 0;
+    ctx->tx_busy = 0;
+
+    // Задержка между отправками 30 секунд
+    HAL_Delay(30000);
+
+    return SECURE_UART_OK;
+}
+
+SecureUartError secure_uart_receive(
+    SecureUartContext *ctx,
+    uint8_t *data,
+    uint16_t *data_size
+) {
+    // Ожидание завершения приема
+    uint32_t timeout = HAL_GetTick() + 5000;  // 5 секунд таймаут
+    while (!ctx->rx_complete && HAL_GetTick() < timeout) {
+        HAL_Delay(1);
+    }
+
+    // Проверка таймаута
+    if (!ctx->rx_complete) {
+        secure_uart_debug(ctx, "Ошибка: таймаут при приеме");
+        return SECURE_UART_ERROR_TIMEOUT;
+    }
+
+    // Сброс флага завершения приема
+    ctx->rx_complete = 0;
+
+    // Обработка принятого фрейма
+    SecureUartFrame *frame = (SecureUartFrame *)ctx->rx_buffer;
+    SecureUartError result = secure_uart_process_frame(ctx, frame, data, data_size);
+
+    // Возобновление приема по DMA
+    HAL_UART_Receive_DMA(ctx->huart_rx, ctx->rx_buffer, sizeof(ctx->rx_buffer));
+
+    return result;
+}
+
+void secure_uart_rx_idle_callback(SecureUartContext *ctx) {
+    // Останавливаем DMA
+    __HAL_DMA_DISABLE(ctx->huart_rx->hdmarx);
+
+    // Вычисляем размер принятых данных
+    ctx->rx_size = sizeof(ctx->rx_buffer) - __HAL_DMA_GET_COUNTER(ctx->huart_rx->hdmarx);
+
+    // Устанавливаем флаг завершения приема
+    ctx->rx_complete = 1;
+
+    // Отладочное сообщение
+    char debug_buf[64];
+    snprintf(debug_buf, sizeof(debug_buf), "IDLE прерывание, принято %d байт", ctx->rx_size);
+    secure_uart_debug(ctx, debug_buf);
+}
+
+void secure_uart_tx_complete_callback(SecureUartContext *ctx) {
+    // Устанавливаем флаг завершения передачи
+    ctx->tx_complete = 1;
+    secure_uart_debug(ctx, "Передача завершена");
+}
+
+void secure_uart_rx_complete_callback(SecureUartContext *ctx) {
+    // Устанавливаем флаг завершения приема
+    ctx->rx_complete = 1;
+    secure_uart_debug(ctx, "Прием завершен");
+}
+
+void secure_uart_debug(SecureUartContext *ctx, const char *message) {
+    // Отправка отладочного сообщения в UART для мониторинга
+    if (ctx->huart_monitor != NULL) {
+        HAL_UART_Transmit(ctx->huart_monitor, (uint8_t *)message, strlen(message), 100);
+        // Добавляем перевод строки
+        const char newline[2] = "\r\n";
+        HAL_UART_Transmit(ctx->huart_monitor, (uint8_t *)newline, 2, 100);
+    }
+}

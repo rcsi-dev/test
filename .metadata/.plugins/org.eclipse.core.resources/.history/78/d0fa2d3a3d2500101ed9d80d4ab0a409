@@ -1,0 +1,352 @@
+#include "stm32f4xx_hal.h"
+#include <stdio.h>
+#include <string.h>
+
+// Опережающие объявления функций
+void run_uart_loopback_test(UART_HandleTypeDef *huart, UART_HandleTypeDef *huart_monitor);
+
+/**
+ * @brief Проверка соединения UART в режиме петли (loopback)
+ *
+ * Эта функция проверяет работоспособность UART путем отправки тестовых данных
+ * и ожидания их приема. Режим loopback требует физического соединения
+ * выхода TX со входом RX одного и того же UART.
+ *
+ * @param huart Указатель на структуру UART для тестирования
+ * @param huart_monitor Указатель на UART для вывода отладочной информации
+ */
+void run_uart_loopback_test(UART_HandleTypeDef *huart, UART_HandleTypeDef *huart_monitor) {
+    char msg[100];
+    sprintf(msg, "\r\n==== Начало теста Loopback для UART ====\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    // Тестовые данные
+    const uint8_t test_pattern[] = {
+        0x02,   // STX
+        0x55,   // Чередование 0 и 1 (01010101)
+        0xAA,   // Чередование 1 и 0 (10101010)
+        0xFF,   // Все биты 1
+        0x00,   // Все биты 0
+        0x03    // ETX
+    };
+    const size_t pattern_size = sizeof(test_pattern);
+
+    // Буфер для приема данных
+    uint8_t rx_buffer[20] = {0};
+
+    // Отладочный вывод параметров UART
+    sprintf(msg, "UART настройки: BaudRate=%lu, WordLength=%u, StopBits=%u, Parity=%u\r\n",
+            (unsigned long)huart->Init.BaudRate,
+            huart->Init.WordLength,
+            huart->Init.StopBits,
+            huart->Init.Parity);
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    // Тест 1: Отправка одиночных байтов
+    sprintf(msg, "Тест 1: Отправка одиночных байтов\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    for (uint8_t i = 0; i < pattern_size; i++) {
+        // Очищаем буфер приема
+        rx_buffer[0] = 0;
+
+        // Отправляем один байт
+        sprintf(msg, "  Отправка байта: 0x%02X\r\n", test_pattern[i]);
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+        HAL_UART_Transmit(huart, &test_pattern[i], 1, 100);
+
+        // Ожидаем прием данных с таймаутом
+        HAL_StatusTypeDef status = HAL_UART_Receive(huart, rx_buffer, 1, 200);
+
+        if (status == HAL_OK) {
+            sprintf(msg, "  Принят байт: 0x%02X ", rx_buffer[0]);
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+            if (rx_buffer[0] == test_pattern[i]) {
+                sprintf(msg, "- СОВПАДАЕТ\r\n");
+            } else {
+                sprintf(msg, "- НЕ СОВПАДАЕТ с отправленным 0x%02X\r\n", test_pattern[i]);
+            }
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+        } else {
+            sprintf(msg, "  Ошибка приема: %d\r\n", status);
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+        }
+
+        // Небольшая пауза между тестами
+        HAL_Delay(100);
+    }
+
+    // Тест 2: Отправка всей последовательности целиком
+    sprintf(msg, "\r\nТест 2: Отправка всей последовательности (%u байт)\r\n", (unsigned int)pattern_size);
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    // Очищаем буфер приема
+    memset(rx_buffer, 0, sizeof(rx_buffer));
+
+    // Отправляем тестовую последовательность
+    sprintf(msg, "  Отправка последовательности...\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    HAL_UART_Transmit(huart, test_pattern, pattern_size, 200);
+
+    // Ожидаем прием данных с таймаутом
+    HAL_StatusTypeDef status = HAL_UART_Receive(huart, rx_buffer, pattern_size, 500);
+
+    if (status == HAL_OK) {
+        sprintf(msg, "  Принята последовательность:\r\n  ");
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+        for (uint8_t i = 0; i < pattern_size; i++) {
+            sprintf(msg, "0x%02X ", rx_buffer[i]);
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+        }
+
+        // Проверяем соответствие
+        bool match = true;
+        for (uint8_t i = 0; i < pattern_size; i++) {
+            if (rx_buffer[i] != test_pattern[i]) {
+                match = false;
+                break;
+            }
+        }
+
+        if (match) {
+            sprintf(msg, "\r\n  Результат: ПОСЛЕДОВАТЕЛЬНОСТЬ СОВПАДАЕТ\r\n");
+        } else {
+            sprintf(msg, "\r\n  Результат: ПОСЛЕДОВАТЕЛЬНОСТЬ НЕ СОВПАДАЕТ\r\n");
+        }
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    } else {
+        sprintf(msg, "  Ошибка приема: %d\r\n", status);
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    }
+
+    // Тест 3: Проверка работы буфера FIFO (если включен)
+    sprintf(msg, "\r\nТест 3: Отправка с задержкой\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    // Очищаем буфер приема
+    memset(rx_buffer, 0, sizeof(rx_buffer));
+
+    // Отправляем байты с задержкой
+    for (uint8_t i = 0; i < pattern_size; i++) {
+        HAL_UART_Transmit(huart, &test_pattern[i], 1, 50);
+        HAL_Delay(20); // Задержка между отправками
+    }
+
+    // Небольшая задержка для завершения передачи
+    HAL_Delay(50);
+
+    // Принимаем данные (сколько есть)
+    uint8_t received = 0;
+    while (received < pattern_size) {
+        status = HAL_UART_Receive(huart, &rx_buffer[received], 1, 50);
+        if (status == HAL_OK) {
+            received++;
+        } else {
+            break;
+        }
+    }
+
+    sprintf(msg, "  Принято %u из %u байт\r\n  ",
+            (unsigned int)received, (unsigned int)pattern_size);
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    for (uint8_t i = 0; i < received; i++) {
+        sprintf(msg, "0x%02X ", rx_buffer[i]);
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    }
+    sprintf(msg, "\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "==== Завершение теста Loopback для UART ====\r\n\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+}
+
+/**
+ * @brief Функция для запуска тестирования всех UART
+ */
+void run_all_uart_loopback_tests(UART_HandleTypeDef *huart1, UART_HandleTypeDef *huart2,
+                               UART_HandleTypeDef *huart6, UART_HandleTypeDef *huart_monitor) {
+    char msg[100];
+
+    sprintf(msg, "\r\n\r\n===== ЗАПУСК ТЕСТИРОВАНИЯ UART СОЕДИНЕНИЙ =====\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "ВАЖНО: Для корректной работы теста, подключите перемычки:\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "1. Для USART1: соедините пины PA9 (TX) и PA10 (RX)\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "2. Для USART2: соедините пины PA2 (TX) и PA3 (RX)\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "3. Для USART6: соедините пины PA11 (TX) и PA12 (RX)\r\n\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "Нажмите кнопку USER для запуска тестов...\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    // Ожидаем нажатия кнопки или истечения таймаута
+    uint32_t start_time = HAL_GetTick();
+    while (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) != GPIO_PIN_RESET) {
+        if (HAL_GetTick() - start_time > 10000) { // 10 секунд таймаут
+            sprintf(msg, "Таймаут ожидания. Запуск тестов...\r\n");
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+            break;
+        }
+        HAL_Delay(100);
+    }
+
+    if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_RESET) {
+        sprintf(msg, "Кнопка нажата. Запуск тестов...\r\n");
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+        HAL_Delay(500); // Задержка для дребезга контактов
+    }
+
+    // Тест USART1
+    sprintf(msg, "\r\n----- Тестирование USART1 -----\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    run_uart_loopback_test(huart1, huart_monitor);
+
+    // Тест USART6
+    sprintf(msg, "\r\n----- Тестирование USART6 -----\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    run_uart_loopback_test(huart6, huart_monitor);
+
+    // Тест взаимодействия USART1 и USART6
+    sprintf(msg, "\r\n----- Инструкции для тестирования взаимодействия USART1<->USART6 -----\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "Для проверки соединения между USART1 и USART6:\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "1. Отсоедините перемычки loopback\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "2. Соедините следующие пины между собой:\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "   - PA9 (USART1 TX) с PA12 (USART6 RX)\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "   - PA10 (USART1 RX) с PA11 (USART6 TX)\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    sprintf(msg, "3. Нажмите кнопку USER для запуска теста взаимодействия...\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+    // Ожидаем нажатия кнопки или истечения таймаута
+    start_time = HAL_GetTick();
+    while (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) != GPIO_PIN_RESET) {
+        if (HAL_GetTick() - start_time > 20000) { // 20 секунд таймаут
+            sprintf(msg, "Таймаут ожидания. Пропуск теста взаимодействия.\r\n");
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+            break;
+        }
+        HAL_Delay(100);
+    }
+
+    if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_RESET) {
+        sprintf(msg, "Кнопка нажата. Запуск теста взаимодействия...\r\n");
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+        HAL_Delay(500); // Задержка для дребезга контактов
+
+        // Тест передачи USART1 -> USART6
+        sprintf(msg, "\r\n----- Тест передачи USART1 -> USART6 -----\r\n");
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+        // Тестовые данные
+        const uint8_t test_data[] = {0x02, 0x55, 0xAA, 0x03};
+        uint8_t rx_buffer[10] = {0};
+
+        // Отправляем данные через USART1
+        sprintf(msg, "Отправка тестовых данных через USART1...\r\n");
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+        HAL_UART_Transmit(huart1, test_data, sizeof(test_data), 100);
+
+        // Принимаем через USART6
+        HAL_StatusTypeDef status = HAL_UART_Receive(huart6, rx_buffer, sizeof(test_data), 500);
+
+        if (status == HAL_OK) {
+            sprintf(msg, "Данные получены через USART6:\r\n  ");
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+            for (uint8_t i = 0; i < sizeof(test_data); i++) {
+                sprintf(msg, "0x%02X ", rx_buffer[i]);
+                HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+            }
+
+            // Проверяем соответствие
+            bool match = true;
+            for (uint8_t i = 0; i < sizeof(test_data); i++) {
+                if (rx_buffer[i] != test_data[i]) {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match) {
+                sprintf(msg, "\r\nРезультат: USART1 -> USART6 РАБОТАЕТ КОРРЕКТНО\r\n");
+            } else {
+                sprintf(msg, "\r\nРезультат: USART1 -> USART6 ОШИБКА ДАННЫХ\r\n");
+            }
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+        } else {
+            sprintf(msg, "Ошибка приема через USART6: %d\r\n", status);
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+        }
+
+        // Тест передачи USART6 -> USART1
+        sprintf(msg, "\r\n----- Тест передачи USART6 -> USART1 -----\r\n");
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+        // Очищаем буфер приема
+        memset(rx_buffer, 0, sizeof(rx_buffer));
+
+        // Отправляем данные через USART6
+        sprintf(msg, "Отправка тестовых данных через USART6...\r\n");
+        HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+        HAL_UART_Transmit(huart6, test_data, sizeof(test_data), 100);
+
+        // Принимаем через USART1
+        status = HAL_UART_Receive(huart1, rx_buffer, sizeof(test_data), 500);
+
+        if (status == HAL_OK) {
+            sprintf(msg, "Данные получены через USART1:\r\n  ");
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+
+            for (uint8_t i = 0; i < sizeof(test_data); i++) {
+                sprintf(msg, "0x%02X ", rx_buffer[i]);
+                HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+            }
+
+            // Проверяем соответствие
+            bool match = true;
+            for (uint8_t i = 0; i < sizeof(test_data); i++) {
+                if (rx_buffer[i] != test_data[i]) {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match) {
+                sprintf(msg, "\r\nРезультат: USART6 -> USART1 РАБОТАЕТ КОРРЕКТНО\r\n");
+            } else {
+                sprintf(msg, "\r\nРезультат: USART6 -> USART1 ОШИБКА ДАННЫХ\r\n");
+            }
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+        } else {
+            sprintf(msg, "Ошибка приема через USART1: %d\r\n", status);
+            HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+        }
+    }
+
+    sprintf(msg, "\r\n===== ЗАВЕРШЕНИЕ ТЕСТИРОВАНИЯ UART СОЕДИНЕНИЙ =====\r\n\r\n");
+    HAL_UART_Transmit(huart_monitor, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+}

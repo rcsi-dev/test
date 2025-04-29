@@ -1,0 +1,26 @@
+/**
+ * @file speck_standalone_test.c
+ * @brief Отдельная программа для тестирования Speck
+ *
+ * Этот файл используется для создания отдельного исполняемого файла
+ * для тестирования реализации алгоритма Speck без конфликта с основным проектом.
+ */
+
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+#include "speck.h"
+#include "speck_test.h"
+
+/**
+ * @brief Точка входа для тестового приложения
+ */
+int main() {
+    printf("=== ОТДЕЛЬНОЕ ТЕСТИРОВАНИЕ АЛГОРИТМА ШИФРОВАНИЯ SPECK 64/128 ===\n\n");
+
+    // Запуск всех тестов
+    run_speck_tests();
+
+    return 0;
+}

@@ -1,0 +1,248 @@
+/**
+ * @file speck_test.c
+ * @brief Тестирование корректности шифрования и расшифровки алгоритмом Speck 64/128
+ *
+ * Этот файл содержит функции для тестирования реализации алгоритма Speck.
+ * Он не является частью основного проекта, но может быть использован для проверки
+ * корректности реализации шифрования/расшифровки.
+ */
+
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include "speck.h"
+
+/**
+ * @brief Выводит массив байт в шестнадцатеричном формате
+ *
+ * @param data Указатель на массив байт
+ * @param size Размер массива
+ */
+void print_hex(const uint8_t *data, uint16_t size) {
+    for (uint16_t i = 0; i < size; i++) {
+        printf("%02X ", data[i]);
+    }
+    printf("\n");
+}
+
+/**
+ * @brief Тестирует корректность шифрования/расшифровки на тестовых векторах
+ */
+void test_speck_with_test_vectors() {
+    printf("Тестирование Speck 64/128 на известных тестовых векторах\n");
+
+    // Тестовый вектор 1 из спецификации Speck
+    uint32_t key1[4] = {0x1918, 0x1110, 0x0908, 0x0100};
+    uint32_t pt1[2] = {0x6574, 0x694c};
+    uint32_t expected_ct1[2] = {0xa868, 0x42f2};
+    uint32_t ct1[2] = {0, 0};
+    uint32_t decrypted1[2] = {0, 0};
+
+    printf("Тестовый вектор 1:\n");
+    printf("Ключ: ");
+    print_hex((uint8_t *)key1, sizeof(key1));
+    printf("Открытый текст: ");
+    print_hex((uint8_t *)pt1, sizeof(pt1));
+
+    // Инициализация ключа
+    SpeckKey key_schedule1;
+    speck_init_key(&key_schedule1, key1);
+
+    // Шифрование
+    speck_encrypt(&key_schedule1, pt1, ct1);
+    printf("Результат шифрования: ");
+    print_hex((uint8_t *)ct1, sizeof(ct1));
+    printf("Ожидаемый результат: ");
+    print_hex((uint8_t *)expected_ct1, sizeof(expected_ct1));
+
+    // Расшифровка
+    speck_decrypt(&key_schedule1, ct1, decrypted1);
+    printf("Результат расшифровки: ");
+    print_hex((uint8_t *)decrypted1, sizeof(decrypted1));
+
+    // Проверка результатов
+    if (memcmp(ct1, expected_ct1, sizeof(ct1)) == 0 &&
+        memcmp(pt1, decrypted1, sizeof(pt1)) == 0) {
+        printf("ТЕСТ 1 ПРОЙДЕН!\n\n");
+    } else {
+        printf("ТЕСТ 1 НЕ ПРОЙДЕН!\n\n");
+    }
+
+    // Тестовый вектор 2 (собственный)
+    uint32_t key2[4] = {0x01234567, 0x89ABCDEF, 0xFEDCBA98, 0x76543210};
+    uint32_t pt2[2] = {0x01234567, 0x89ABCDEF};
+    uint32_t ct2[2] = {0, 0};
+    uint32_t decrypted2[2] = {0, 0};
+
+    printf("Тестовый вектор 2:\n");
+    printf("Ключ: ");
+    print_hex((uint8_t *)key2, sizeof(key2));
+    printf("Открытый текст: ");
+    print_hex((uint8_t *)pt2, sizeof(pt2));
+
+    // Инициализация ключа
+    SpeckKey key_schedule2;
+    speck_init_key(&key_schedule2, key2);
+
+    // Шифрование
+    speck_encrypt(&key_schedule2, pt2, ct2);
+    printf("Результат шифрования: ");
+    print_hex((uint8_t *)ct2, sizeof(ct2));
+
+    // Расшифровка
+    speck_decrypt(&key_schedule2, ct2, decrypted2);
+    printf("Результат расшифровки: ");
+    print_hex((uint8_t *)decrypted2, sizeof(decrypted2));
+
+    // Проверка результатов
+    if (memcmp(pt2, decrypted2, sizeof(pt2)) == 0) {
+        printf("ТЕСТ 2 ПРОЙДЕН!\n\n");
+    } else {
+        printf("ТЕСТ 2 НЕ ПРОЙДЕН!\n\n");
+    }
+}
+
+/**
+ * @brief Тестирует шифрование и расшифровку произвольных данных
+ */
+void test_speck_with_arbitrary_data() {
+    printf("Тестирование Speck 64/128 на произвольных данных\n");
+
+    uint32_t key[4] = {0x01234567, 0x89ABCDEF, 0xFEDCBA98, 0x76543210};
+    SpeckKey key_schedule;
+    speck_init_key(&key_schedule, key);
+
+    // Тестирование на строке
+    char test_string[] = "Привет, мир!";
+    uint16_t string_len = strlen(test_string);
+    uint16_t num_blocks = (string_len + 7) / 8; // Округление вверх до полных блоков
+    uint16_t padded_len = num_blocks * 8;
+
+    uint8_t *padded_data = (uint8_t *)calloc(padded_len, 1);
+    uint8_t *encrypted_data = (uint8_t *)calloc(padded_len, 1);
+    uint8_t *decrypted_data = (uint8_t *)calloc(padded_len, 1);
+
+    // Копируем строку в буфер с паддингом
+    memcpy(padded_data, test_string, string_len);
+
+    printf("Исходная строка: %s\n", test_string);
+    printf("Исходные данные с паддингом: ");
+    print_hex(padded_data, padded_len);
+
+    // Шифруем по блокам
+    for (uint16_t i = 0; i < num_blocks; i++) {
+        uint32_t *pt_block = (uint32_t *)&padded_data[i * 8];
+        uint32_t *ct_block = (uint32_t *)&encrypted_data[i * 8];
+
+        speck_encrypt(&key_schedule, pt_block, ct_block);
+    }
+
+    printf("Зашифрованные данные: ");
+    print_hex(encrypted_data, padded_len);
+
+    // Расшифровываем по блокам
+    for (uint16_t i = 0; i < num_blocks; i++) {
+        uint32_t *ct_block = (uint32_t *)&encrypted_data[i * 8];
+        uint32_t *pt_block = (uint32_t *)&decrypted_data[i * 8];
+
+        speck_decrypt(&key_schedule, ct_block, pt_block);
+    }
+
+    printf("Расшифрованные данные: ");
+    print_hex(decrypted_data, padded_len);
+    printf("Расшифрованная строка: %s\n", decrypted_data);
+
+    // Проверка результатов
+    if (memcmp(padded_data, decrypted_data, padded_len) == 0) {
+        printf("ТЕСТ НА ПРОИЗВОЛЬНЫХ ДАННЫХ ПРОЙДЕН!\n\n");
+    } else {
+        printf("ТЕСТ НА ПРОИЗВОЛЬНЫХ ДАННЫХ НЕ ПРОЙДЕН!\n\n");
+    }
+
+    free(padded_data);
+    free(encrypted_data);
+    free(decrypted_data);
+}
+
+/**
+ * @brief Тестирует шифрование и расшифровку случайных данных различной длины
+ */
+void test_speck_with_random_data() {
+    printf("Тестирование Speck 64/128 на случайных данных различной длины\n");
+
+    uint32_t key[4] = {0x01234567, 0x89ABCDEF, 0xFEDCBA98, 0x76543210};
+    SpeckKey key_schedule;
+    speck_init_key(&key_schedule, key);
+
+    // Массив тестируемых размеров данных
+    uint16_t test_sizes[] = {1, 4, 7, 8, 16, 32, 63, 64, 65, 127, 128};
+    uint16_t num_tests = sizeof(test_sizes) / sizeof(test_sizes[0]);
+
+    for (uint16_t test_idx = 0; test_idx < num_tests; test_idx++) {
+        uint16_t data_size = test_sizes[test_idx];
+        uint16_t num_blocks = (data_size + 7) / 8; // Округление вверх до полных блоков
+        uint16_t padded_size = num_blocks * 8;
+
+        uint8_t *original_data = (uint8_t *)calloc(padded_size, 1);
+        uint8_t *encrypted_data = (uint8_t *)calloc(padded_size, 1);
+        uint8_t *decrypted_data = (uint8_t *)calloc(padded_size, 1);
+
+        // Заполняем исходные данные случайными значениями
+        for (uint16_t i = 0; i < data_size; i++) {
+            original_data[i] = (uint8_t)(i * 37 + 41); // Простая псевдослучайная последовательность
+        }
+
+        printf("Тест %u: размер данных = %u байт\n", test_idx + 1, data_size);
+
+        // Шифруем по блокам
+        for (uint16_t i = 0; i < num_blocks; i++) {
+            uint32_t *pt_block = (uint32_t *)&original_data[i * 8];
+            uint32_t *ct_block = (uint32_t *)&encrypted_data[i * 8];
+
+            speck_encrypt(&key_schedule, pt_block, ct_block);
+        }
+
+        // Расшифровываем по блокам
+        for (uint16_t i = 0; i < num_blocks; i++) {
+            uint32_t *ct_block = (uint32_t *)&encrypted_data[i * 8];
+            uint32_t *pt_block = (uint32_t *)&decrypted_data[i * 8];
+
+            speck_decrypt(&key_schedule, ct_block, pt_block);
+        }
+
+        // Проверка результатов
+        if (memcmp(original_data, decrypted_data, padded_size) == 0) {
+            printf("ТЕСТ %u ПРОЙДЕН!\n\n", test_idx + 1);
+        } else {
+            printf("ТЕСТ %u НЕ ПРОЙДЕН!\n\n", test_idx + 1);
+            printf("Исходные данные: ");
+            print_hex(original_data, data_size);
+            printf("Расшифрованные данные: ");
+            print_hex(decrypted_data, data_size);
+        }
+
+        free(original_data);
+        free(encrypted_data);
+        free(decrypted_data);
+    }
+}
+
+/**
+ * @brief Точка входа для тестового приложения
+ */
+int main() {
+    printf("=== ТЕСТИРОВАНИЕ АЛГОРИТМА ШИФРОВАНИЯ SPECK 64/128 ===\n\n");
+
+    // Тестирование на известных тестовых векторах
+    test_speck_with_test_vectors();
+
+    // Тестирование на произвольных данных
+    test_speck_with_arbitrary_data();
+
+    // Тестирование на случайных данных различной длины
+    test_speck_with_random_data();
+
+    printf("=== ТЕСТИРОВАНИЕ ЗАВЕРШЕНО ===\n");
+
+    return 0;
+}

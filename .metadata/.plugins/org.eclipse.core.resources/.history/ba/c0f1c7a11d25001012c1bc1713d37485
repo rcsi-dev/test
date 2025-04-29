@@ -1,0 +1,13 @@
+/*
+ * speck_cmac.h
+ *
+ *  Created on: Apr 29, 2025
+ *      Author: rcsi
+ */
+
+#ifndef INC_SPECK_CMAC_H_
+#define INC_SPECK_CMAC_H_
+
+
+
+#endif /* INC_SPECK_CMAC_H_ */

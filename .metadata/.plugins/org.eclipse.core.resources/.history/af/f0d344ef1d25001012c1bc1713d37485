@@ -1,0 +1,169 @@
+/**
+ * @file secure_uart.h
+ * @brief Защищенный протокол передачи данных поверх UART
+ */
+
+#ifndef SECURE_UART_H
+#define SECURE_UART_H
+
+#include <stdint.h>
+#include <stddef.h>
+#include "stm32f4xx_hal.h"
+
+/**
+ * @brief Максимальный размер данных в одном фрейме
+ */
+#define SECURE_UART_MAX_DATA_SIZE 128
+
+/**
+ * @brief Размер заголовка фрейма
+ */
+#define SECURE_UART_HEADER_SIZE 8
+
+/**
+ * @brief Размер счётчика для защиты от Replay-атак
+ */
+#define SECURE_UART_COUNTER_SIZE 4
+
+/**
+ * @brief Коды ошибок защищенного UART
+ */
+typedef enum {
+    SECURE_UART_OK = 0,
+    SECURE_UART_ERROR_MAC,       // Ошибка проверки MAC
+    SECURE_UART_ERROR_REPLAY,    // Обнаружена Replay-атака
+    SECURE_UART_ERROR_SIZE,      // Некорректный размер данных
+    SECURE_UART_ERROR_TIMEOUT,   // Таймаут ожидания
+    SECURE_UART_ERROR_BUSY       // Устройство занято передачей
+} SecureUartError;
+
+/**
+ * @brief Структура фрейма защищенного UART
+ */
+typedef struct {
+    // Заголовок
+    uint8_t magic[2];           // Магическое число для идентификации фрейма (0xA5, 0x5A)
+    uint8_t version;            // Версия протокола
+    uint8_t flags;              // Флаги (резерв)
+    uint16_t data_size;         // Размер данных
+    uint16_t frame_size;        // Общий размер фрейма
+
+    // Счетчик для защиты от Replay-атак
+    uint32_t counter;
+
+    // Зашифрованные данные
+    uint8_t data[SECURE_UART_MAX_DATA_SIZE];
+
+    // MAC
+    uint8_t mac[SPECK_CMAC_SIZE];
+} __attribute__((packed)) SecureUartFrame;
+
+/**
+ * @brief Структура контекста защищенного UART
+ */
+typedef struct {
+    // UART для обмена данными
+    UART_HandleTypeDef *huart_tx;
+    UART_HandleTypeDef *huart_rx;
+
+    // UART для мониторинга
+    UART_HandleTypeDef *huart_monitor;
+
+    // Ключи шифрования и аутентификации
+    uint8_t encrypt_key[SPECK_KEY_SIZE];
+    uint8_t auth_key[SPECK_KEY_SIZE];
+
+    // Счетчики для защиты от Replay-атак
+    uint32_t tx_counter;
+    uint32_t rx_counter;
+
+    // Буферы приема/передачи
+    uint8_t tx_buffer[sizeof(SecureUartFrame)];
+    uint8_t rx_buffer[sizeof(SecureUartFrame)];
+
+    // Флаги состояния
+    uint8_t rx_complete;
+    uint8_t tx_complete;
+    uint8_t tx_busy;
+
+    // Размер принятых данных
+    uint16_t rx_size;
+} SecureUartContext;
+
+/**
+ * @brief Инициализация контекста защищенного UART
+ *
+ * @param ctx Указатель на контекст
+ * @param huart_tx UART для передачи
+ * @param huart_rx UART для приема
+ * @param huart_monitor UART для мониторинга
+ * @param encrypt_key Ключ для шифрования (16 байт)
+ * @param auth_key Ключ для аутентификации (16 байт)
+ */
+void secure_uart_init(
+    SecureUartContext *ctx,
+    UART_HandleTypeDef *huart_tx,
+    UART_HandleTypeDef *huart_rx,
+    UART_HandleTypeDef *huart_monitor,
+    const uint8_t *encrypt_key,
+    const uint8_t *auth_key
+);
+
+/**
+ * @brief Отправка данных через защищенный UART
+ *
+ * @param ctx Указатель на контекст
+ * @param data Указатель на данные
+ * @param data_size Размер данных
+ * @return SecureUartError Код ошибки
+ */
+SecureUartError secure_uart_send(
+    SecureUartContext *ctx,
+    const uint8_t *data,
+    uint16_t data_size
+);
+
+/**
+ * @brief Прием данных через защищенный UART
+ *
+ * @param ctx Указатель на контекст
+ * @param data Указатель для записи принятых данных
+ * @param data_size Указатель для записи размера принятых данных
+ * @return SecureUartError Код ошибки
+ */
+SecureUartError secure_uart_receive(
+    SecureUartContext *ctx,
+    uint8_t *data,
+    uint16_t *data_size
+);
+
+/**
+ * @brief Обработчик прерывания IDLE для приема данных
+ *
+ * @param ctx Указатель на контекст
+ */
+void secure_uart_rx_idle_callback(SecureUartContext *ctx);
+
+/**
+ * @brief Обработчик завершения передачи по DMA
+ *
+ * @param ctx Указатель на контекст
+ */
+void secure_uart_tx_complete_callback(SecureUartContext *ctx);
+
+/**
+ * @brief Обработчик завершения приема по DMA
+ *
+ * @param ctx Указатель на контекст
+ */
+void secure_uart_rx_complete_callback(SecureUartContext *ctx);
+
+/**
+ * @brief Отправка отладочной информации в мониторинг
+ *
+ * @param ctx Указатель на контекст
+ * @param message Сообщение для отправки
+ */
+void secure_uart_debug(SecureUartContext *ctx, const char *message);
+
+#endif /* SECURE_UART_H */

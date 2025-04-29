@@ -1,0 +1,13 @@
+/*
+ * uart_secure.h
+ *
+ *  Created on: Apr 29, 2025
+ *      Author: rcsi
+ */
+
+#ifndef INC_UART_SECURE_H_
+#define INC_UART_SECURE_H_
+
+
+
+#endif /* INC_UART_SECURE_H_ */

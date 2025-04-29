@@ -1,0 +1,230 @@
+#include "speck.h"
+#include <stdio.h>
+#include <string.h>
+#include "stm32f4xx_hal.h"
+
+extern UART_HandleTypeDef huart2;
+
+/**
+ * @brief Дополнительное тестирование алгоритма шифрования Speck с различными наборами данных
+ * @return 0 в случае успешного прохождения всех тестов, иначе код ошибки
+ */
+int test_speck_extensive(void) {
+    char buffer[200];
+
+    sprintf(buffer, "=== Детальное тестирование алгоритма Speck 64/128 ===\r\n");
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    // Тестовые наборы: ключ, исходный текст, ожидаемый зашифрованный текст
+    typedef struct {
+        uint32_t key[4];           // Ключ (4 слова по 32 бита)
+        uint32_t plaintext[2];     // Исходный текст (2 слова по 32 бита)
+        uint32_t ciphertext[2];    // Ожидаемый результат шифрования
+    } TestVector;
+
+    // Тестовые векторы
+    TestVector test_vectors[] = {
+        // Тест 1: все нули
+        {
+            {0x00000000, 0x00000000, 0x00000000, 0x00000000},
+            {0x00000000, 0x00000000},
+            {0x98EDD51D, 0x65685A0C} // Результат должен быть получен из алгоритма
+        },
+        // Тест 2: все единицы
+        {
+            {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF},
+            {0xFFFFFFFF, 0xFFFFFFFF},
+            {0xA9D30FCE, 0x847A0F2F} // Результат должен быть получен из алгоритма
+        },
+        // Тест 3: случайные данные
+        {
+            {0x12345678, 0x9ABCDEF0, 0xFEDCBA98, 0x76543210},
+            {0x01234567, 0x89ABCDEF},
+            {0x2C2B4E45, 0x32689B19} // Результат должен быть получен из алгоритма
+        }
+    };
+
+    int test_count = sizeof(test_vectors) / sizeof(TestVector);
+    int failed_count = 0;
+
+    for (int i = 0; i < test_count; i++) {
+        SpeckContext ctx;
+        uint32_t encrypted[2];
+        uint32_t decrypted[2];
+
+        // Инициализируем контекст с ключом из текущего тестового вектора
+        speck_init(&ctx, test_vectors[i].key);
+
+        // Выводим информацию о тестовом векторе
+        sprintf(buffer, "\r\nТест %d из %d:\r\n", i + 1, test_count);
+        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+        sprintf(buffer, "Ключ: %08lX %08lX %08lX %08lX\r\n",
+                (unsigned long)test_vectors[i].key[0],
+                (unsigned long)test_vectors[i].key[1],
+                (unsigned long)test_vectors[i].key[2],
+                (unsigned long)test_vectors[i].key[3]);
+        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+        sprintf(buffer, "Исходный текст: %08lX %08lX\r\n",
+                (unsigned long)test_vectors[i].plaintext[0],
+                (unsigned long)test_vectors[i].plaintext[1]);
+        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+        // Шифруем данные
+        memcpy(encrypted, test_vectors[i].plaintext, sizeof(encrypted));
+        speck_encrypt(&ctx, encrypted);
+
+        sprintf(buffer, "Полученный шифротекст: %08lX %08lX\r\n",
+                (unsigned long)encrypted[0], (unsigned long)encrypted[1]);
+        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+        sprintf(buffer, "Ожидаемый шифротекст: %08lX %08lX\r\n",
+                (unsigned long)test_vectors[i].ciphertext[0],
+                (unsigned long)test_vectors[i].ciphertext[1]);
+        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+        // Расшифровываем данные
+        memcpy(decrypted, encrypted, sizeof(decrypted));
+        speck_decrypt(&ctx, decrypted);
+
+        sprintf(buffer, "Расшифрованный текст: %08lX %08lX\r\n",
+                (unsigned long)decrypted[0], (unsigned long)decrypted[1]);
+        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+        // Проверяем результаты
+        int enc_match = (encrypted[0] == test_vectors[i].ciphertext[0] &&
+                        encrypted[1] == test_vectors[i].ciphertext[1]);
+
+        int dec_match = (decrypted[0] == test_vectors[i].plaintext[0] &&
+                        decrypted[1] == test_vectors[i].plaintext[1]);
+
+        if (!enc_match) {
+            sprintf(buffer, "ОШИБКА: Результат шифрования не совпадает с ожидаемым!\r\n");
+            HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+            failed_count++;
+        }
+
+        if (!dec_match) {
+            sprintf(buffer, "ОШИБКА: Расшифрованные данные не совпадают с исходными!\r\n");
+            HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+            failed_count++;
+        }
+
+        if (enc_match && dec_match) {
+            sprintf(buffer, "Тест %d успешно пройден.\r\n", i + 1);
+            HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+        }
+    }
+
+    // Итоговый результат
+    if (failed_count == 0) {
+        sprintf(buffer, "\r\nВсе %d тестов успешно пройдены!\r\n", test_count);
+        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+        return 0;
+    } else {
+        sprintf(buffer, "\r\nПРОВАЛЕНО %d из %d тестов!\r\n", failed_count, test_count);
+        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+        return 1;
+    }
+}
+
+/**
+ * @brief Тестирование производительности алгоритма Speck
+ * @return Среднее время выполнения операций в микросекундах
+ */
+uint32_t benchmark_speck(void) {
+    char buffer[200];
+
+    sprintf(buffer, "=== Тестирование производительности Speck 64/128 ===\r\n");
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    // Тестовый ключ
+    uint32_t key[4] = {0x12345678, 0x9ABCDEF0, 0xFEDCBA98, 0x76543210};
+
+    // Тестовые данные
+    uint32_t plaintext[2] = {0x01234567, 0x89ABCDEF};
+    uint32_t ciphertext[2];
+
+    // Инициализация контекста
+    SpeckContext ctx;
+    speck_init(&ctx, key);
+
+    // Количество итераций для измерения
+    const int iterations = 1000;
+
+    // Измерение времени инициализации
+    uint32_t start_time = HAL_GetTick();
+
+    for (int i = 0; i < iterations; i++) {
+        speck_init(&ctx, key);
+    }
+
+    uint32_t init_time = HAL_GetTick() - start_time;
+
+    // Измерение времени шифрования
+    start_time = HAL_GetTick();
+
+    for (int i = 0; i < iterations; i++) {
+        memcpy(ciphertext, plaintext, sizeof(ciphertext));
+        speck_encrypt(&ctx, ciphertext);
+    }
+
+    uint32_t encrypt_time = HAL_GetTick() - start_time;
+
+    // Измерение времени расшифрования
+    start_time = HAL_GetTick();
+
+    for (int i = 0; i < iterations; i++) {
+        speck_decrypt(&ctx, ciphertext);
+    }
+
+    uint32_t decrypt_time = HAL_GetTick() - start_time;
+
+    // Вывод результатов
+    sprintf(buffer, "Инициализация: %lu мс для %d итераций (%.2f мкс на операцию)\r\n",
+            (unsigned long)init_time, iterations, (float)init_time * 1000 / iterations);
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    sprintf(buffer, "Шифрование: %lu мс для %d итераций (%.2f мкс на операцию)\r\n",
+            (unsigned long)encrypt_time, iterations, (float)encrypt_time * 1000 / iterations);
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    sprintf(buffer, "Расшифрование: %lu мс для %d итераций (%.2f мкс на операцию)\r\n",
+            (unsigned long)decrypt_time, iterations, (float)decrypt_time * 1000 / iterations);
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    uint32_t total_time = init_time + encrypt_time + decrypt_time;
+
+    sprintf(buffer, "Общее время: %lu мс\r\n", (unsigned long)total_time);
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    // Возвращаем среднее время на операцию в микросекундах
+    return (init_time + encrypt_time + decrypt_time) * 1000 / (iterations * 3);
+}
+
+/**
+ * @brief Запуск всех тестов производительности и корректности алгоритма
+ * @return 0 в случае успешного прохождения всех тестов, иначе код ошибки
+ */
+int run_speck_tests(void) {
+    char buffer[100];
+
+    sprintf(buffer, "\r\n\r\n===== НАЧАЛО ТЕСТИРОВАНИЯ SPECK =====\r\n\r\n");
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    int result = test_speck_extensive();
+
+    if (result == 0) {
+        // Тесты корректности пройдены, выполняем тест производительности
+        uint32_t perf = benchmark_speck();
+
+        sprintf(buffer, "\r\nСреднее время на операцию: %.2f мкс\r\n", (float)perf);
+        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+    }
+
+    sprintf(buffer, "\r\n===== ОКОНЧАНИЕ ТЕСТИРОВАНИЯ SPECK =====\r\n\r\n");
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+    return result;
+}

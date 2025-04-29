@@ -1,0 +1,6 @@
+../Core/Src/speck.c:11:24:ror32	16	static
+../Core/Src/speck.c:21:24:rol32	16	static
+../Core/Src/speck.c:25:6:speck_init	64	static
+../Core/Src/speck.c:52:6:speck_encrypt	40	static
+../Core/Src/speck.c:71:6:speck_decrypt	40	static
+../Core/Src/speck.c:93:6:speck_mac	56	static

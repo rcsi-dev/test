@@ -1,0 +1,453 @@
+/**
+ * @file secure_uart.c
+ * @brief Реализация защищенного протокола передачи данных поверх UART
+ */
+
+#include <string.h>
+#include <stdio.h>
+#include "secure_uart.h"
+
+/**
+ * @brief Инициализирует контекст защищенного UART
+ */
+void SecureUart_Init(SecureUartContext *ctx, UART_HandleTypeDef *huart_tx, UART_HandleTypeDef *huart_rx,
+                     UART_HandleTypeDef *huart_mon, const uint32_t key_data[4]) {
+    // Очищаем структуру контекста
+    memset(ctx, 0, sizeof(SecureUartContext));
+
+    // Устанавливаем хендлеры UART
+    ctx->huart_tx = huart_tx;
+    ctx->huart_rx = huart_rx;
+    ctx->huart_mon = huart_mon;
+
+    // Инициализируем ключ шифрования
+    speck_init_key(&ctx->key, key_data);
+
+    // Устанавливаем начальное состояние и идентификаторы сообщений
+    ctx->state = SECURE_UART_STATE_IDLE;
+    ctx->next_message_id = 1;
+    ctx->last_rx_message_id = 0;
+
+    // Логируем информацию об инициализации
+    SecureUart_Log(ctx, "Инициализация защищенного UART выполнена успешно");
+}
+
+/**
+ * @brief Запускает прием данных по UART в режиме DMA с IDLE прерыванием
+ */
+void SecureUart_StartReceive(SecureUartContext *ctx) {
+    // Очищаем буфер приема
+    memset(ctx->rx_buffer, 0, SECURE_UART_BUFFER_SIZE);
+    ctx->rx_size = 0;
+
+    // Разрешаем IDLE прерывание
+    __HAL_UART_ENABLE_IT(ctx->huart_rx, UART_IT_IDLE);
+
+    // Запускаем прием по DMA
+    HAL_UART_Receive_DMA(ctx->huart_rx, ctx->rx_buffer, SECURE_UART_BUFFER_SIZE);
+
+    // Логируем информацию о запуске приема
+    SecureUart_Log(ctx, "Запущен прием данных по UART в режиме DMA");
+}
+
+/**
+ * @brief Отправляет данные через защищенный UART
+ */
+bool SecureUart_Send(SecureUartContext *ctx, const uint8_t *data, uint16_t size) {
+    SecureUartFrame frame;
+    uint16_t tx_size = 0;
+
+    // Проверка размера данных
+    if (size > SECURE_UART_MAX_PAYLOAD_SIZE) {
+        SecureUart_Log(ctx, "Ошибка: превышен максимальный размер полезной нагрузки");
+        return false;
+    }
+
+    // Ожидаем завершения предыдущей передачи
+    if (!ctx->tx_complete) {
+        SecureUart_Log(ctx, "Ошибка: предыдущая передача не завершена");
+        return false;
+    }
+
+    // Заполняем заголовок фрейма
+    frame.magic = SECURE_UART_FRAME_MAGIC;
+    frame.message_id = ctx->next_message_id++;
+    frame.payload_length = size;
+
+    // Зашифровываем полезную нагрузку
+    uint32_t *pt_blocks = (uint32_t *)data;
+    uint32_t *ct_blocks = (uint32_t *)frame.payload;
+    uint32_t num_blocks = (size + 7) / 8; // Округление вверх до полных блоков
+
+    for (uint32_t i = 0; i < num_blocks; i++) {
+        uint32_t block[2] = {0, 0}; // Инициализируем нулями для паддинга
+
+        // Копируем данные в блок (с учетом возможного неполного последнего блока)
+        uint32_t offset = i * 8;
+        uint32_t remaining = (size - offset < 8) ? size - offset : 8;
+        memcpy(block, &data[offset], remaining);
+
+        // Шифруем блок
+        uint32_t encrypted[2];
+        speck_encrypt(&ctx->key, block, encrypted);
+
+        // Копируем зашифрованный блок в полезную нагрузку фрейма
+        ct_blocks[i*2] = encrypted[0];
+        ct_blocks[i*2+1] = encrypted[1];
+    }
+
+    // Вычисляем MAC для фрейма
+    frame.mac = SecureUart_CalculateMAC(ctx, &frame);
+
+    // Сериализуем фрейм в буфер передачи
+    ctx->tx_buffer[tx_size++] = frame.magic;
+
+    // Идентификатор сообщения (4 байта)
+    ctx->tx_buffer[tx_size++] = (frame.message_id >> 24) & 0xFF;
+    ctx->tx_buffer[tx_size++] = (frame.message_id >> 16) & 0xFF;
+    ctx->tx_buffer[tx_size++] = (frame.message_id >> 8) & 0xFF;
+    ctx->tx_buffer[tx_size++] = frame.message_id & 0xFF;
+
+    // Длина полезной нагрузки (2 байта)
+    ctx->tx_buffer[tx_size++] = (frame.payload_length >> 8) & 0xFF;
+    ctx->tx_buffer[tx_size++] = frame.payload_length & 0xFF;
+
+    // Копируем зашифрованную полезную нагрузку с округлением до полных блоков
+    uint16_t encrypted_size = num_blocks * 8;
+    memcpy(&ctx->tx_buffer[tx_size], frame.payload, encrypted_size);
+    tx_size += encrypted_size;
+
+    // Добавляем MAC (4 байта)
+    ctx->tx_buffer[tx_size++] = (frame.mac >> 24) & 0xFF;
+    ctx->tx_buffer[tx_size++] = (frame.mac >> 16) & 0xFF;
+    ctx->tx_buffer[tx_size++] = (frame.mac >> 8) & 0xFF;
+    ctx->tx_buffer[tx_size++] = frame.mac & 0xFF;
+
+    // Вычисляем и добавляем CRC (2 байта)
+    frame.crc = SecureUart_CalculateCRC16(ctx->tx_buffer, tx_size);
+    ctx->tx_buffer[tx_size++] = (frame.crc >> 8) & 0xFF;
+    ctx->tx_buffer[tx_size++] = frame.crc & 0xFF;
+
+    ctx->tx_size = tx_size;
+    ctx->tx_complete = false;
+
+    // Отправляем данные по UART через DMA
+    if (HAL_UART_Transmit_DMA(ctx->huart_tx, ctx->tx_buffer, tx_size) != HAL_OK) {
+        SecureUart_Log(ctx, "Ошибка при отправке данных по UART");
+        ctx->tx_complete = true;
+        return false;
+    }
+
+    char log_buffer[64];
+    snprintf(log_buffer, sizeof(log_buffer), "Отправлен фрейм, ID: %lu, Размер: %u байт",
+             frame.message_id, size);
+    SecureUart_Log(ctx, log_buffer);
+
+    return true;
+}
+
+/**
+ * @brief Обрабатывает принятые данные
+ */
+void SecureUart_HandleRxData(SecureUartContext *ctx, uint16_t size) {
+    uint16_t i;
+
+    // Обрабатываем каждый байт принятых данных
+    for (i = 0; i < size; i++) {
+        uint8_t byte = ctx->rx_buffer[i];
+
+        // Конечный автомат для приема фрейма
+        switch (ctx->state) {
+            case SECURE_UART_STATE_IDLE:
+                // Ожидание магического байта начала фрейма
+                if (byte == SECURE_UART_FRAME_MAGIC) {
+                    ctx->rx_frame.magic = byte;
+                    ctx->state = SECURE_UART_STATE_MESSAGE_ID;
+                    ctx->rx_size = 0;
+                }
+                break;
+
+            case SECURE_UART_STATE_MESSAGE_ID:
+                // Прием идентификатора сообщения (4 байта)
+                ctx->rx_buffer[ctx->rx_size++] = byte;
+                if (ctx->rx_size == 4) {
+                    ctx->rx_frame.message_id =
+                        ((uint32_t)ctx->rx_buffer[0] << 24) |
+                        ((uint32_t)ctx->rx_buffer[1] << 16) |
+                        ((uint32_t)ctx->rx_buffer[2] << 8) |
+                        (uint32_t)ctx->rx_buffer[3];
+                    ctx->rx_size = 0;
+                    ctx->state = SECURE_UART_STATE_LENGTH;
+                }
+                break;
+
+            case SECURE_UART_STATE_LENGTH:
+                // Прием длины полезной нагрузки (2 байта)
+                ctx->rx_buffer[ctx->rx_size++] = byte;
+                if (ctx->rx_size == 2) {
+                    ctx->rx_frame.payload_length =
+                        ((uint16_t)ctx->rx_buffer[0] << 8) |
+                        (uint16_t)ctx->rx_buffer[1];
+
+                    // Проверяем корректность длины
+                    if (ctx->rx_frame.payload_length > SECURE_UART_MAX_PAYLOAD_SIZE) {
+                        SecureUart_Log(ctx, "Ошибка: превышен максимальный размер полезной нагрузки в принятом фрейме");
+                        ctx->state = SECURE_UART_STATE_IDLE;
+                    } else {
+                        ctx->rx_size = 0;
+                        ctx->rx_payload_index = 0;
+                        ctx->state = SECURE_UART_STATE_PAYLOAD;
+                    }
+                }
+                break;
+
+            case SECURE_UART_STATE_PAYLOAD:
+                // Прием зашифрованной полезной нагрузки
+                ctx->rx_frame.payload[ctx->rx_payload_index++] = byte;
+
+                // Округляем размер зашифрованных данных до полных блоков
+                uint32_t num_blocks = (ctx->rx_frame.payload_length + 7) / 8;
+                uint16_t encrypted_size = num_blocks * 8;
+
+                if (ctx->rx_payload_index >= encrypted_size) {
+                    ctx->rx_size = 0;
+                    ctx->state = SECURE_UART_STATE_MAC;
+                }
+                break;
+
+            case SECURE_UART_STATE_MAC:
+                // Прием MAC (4 байта)
+                ctx->rx_buffer[ctx->rx_size++] = byte;
+                if (ctx->rx_size == 4) {
+                    ctx->rx_frame.mac =
+                        ((uint32_t)ctx->rx_buffer[0] << 24) |
+                        ((uint32_t)ctx->rx_buffer[1] << 16) |
+                        ((uint32_t)ctx->rx_buffer[2] << 8) |
+                        (uint32_t)ctx->rx_buffer[3];
+                    ctx->rx_size = 0;
+                    ctx->state = SECURE_UART_STATE_CRC;
+                }
+                break;
+
+            case SECURE_UART_STATE_CRC:
+                // Прием CRC (2 байта)
+                ctx->rx_buffer[ctx->rx_size++] = byte;
+                if (ctx->rx_size == 2) {
+                    ctx->rx_frame.crc =
+                        ((uint16_t)ctx->rx_buffer[0] << 8) |
+                        (uint16_t)ctx->rx_buffer[1];
+
+                    // Проверяем корректность фрейма
+                    if (SecureUart_ValidateFrame(ctx, &ctx->rx_frame)) {
+                        // Обрабатываем принятый фрейм
+                        uint8_t decrypted_data[SECURE_UART_MAX_PAYLOAD_SIZE];
+                        uint16_t decrypted_size;
+
+                        if (SecureUart_ProcessFrame(ctx, &ctx->rx_frame, decrypted_data, &decrypted_size)) {
+                            char log_buffer[64];
+                            snprintf(log_buffer, sizeof(log_buffer), "Принят корректный фрейм, ID: %lu, Размер: %u байт",
+                                     ctx->rx_frame.message_id, decrypted_size);
+                            SecureUart_Log(ctx, log_buffer);
+
+                            // Здесь можно добавить обработку расшифрованных данных
+                            // Например, вывод их на UART мониторинга
+                            char hex_buffer[SECURE_UART_MAX_PAYLOAD_SIZE * 3 + 1];
+                            char *ptr = hex_buffer;
+                            for (uint16_t j = 0; j < decrypted_size; j++) {
+                                ptr += sprintf(ptr, "%02X ", decrypted_data[j]);
+                            }
+                            SecureUart_Log(ctx, "Расшифрованные данные:");
+                            SecureUart_Log(ctx, hex_buffer);
+                        }
+                    } else {
+                        SecureUart_Log(ctx, "Ошибка: принят некорректный фрейм");
+                    }
+
+                    // Возвращаемся в начальное состояние
+                    ctx->state = SECURE_UART_STATE_IDLE;
+                }
+                break;
+
+            default:
+                // Неверное состояние, возвращаемся в начальное
+                ctx->state = SECURE_UART_STATE_IDLE;
+                break;
+        }
+    }
+}
+
+/**
+ * @brief Обработчик IDLE прерывания UART
+ */
+void SecureUart_IdleCallback(SecureUartContext *ctx) {
+    // Отключаем IDLE прерывание
+    __HAL_UART_DISABLE_IT(ctx->huart_rx, UART_IT_IDLE);
+
+    // Останавливаем DMA
+    HAL_UART_DMAStop(ctx->huart_rx);
+
+    // Вычисляем количество принятых байт
+    uint16_t size = SECURE_UART_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(ctx->huart_rx->hdmarx);
+
+    // Обрабатываем принятые данные
+    if (size > 0) {
+        SecureUart_HandleRxData(ctx, size);
+    }
+
+    // Возобновляем прием
+    SecureUart_StartReceive(ctx);
+}
+
+/**
+ * @brief Обработчик завершения передачи по DMA
+ */
+void SecureUart_TxCpltCallback(SecureUartContext *ctx) {
+    ctx->tx_complete = true;
+    SecureUart_Log(ctx, "Передача фрейма завершена");
+}
+
+/**
+ * @brief Вычисляет контрольную сумму CRC16
+ */
+uint16_t SecureUart_CalculateCRC16(const uint8_t *data, uint16_t size) {
+    uint16_t crc = 0xFFFF;
+    uint16_t i, j;
+
+    for (i = 0; i < size; i++) {
+        crc ^= (uint16_t)data[i];
+        for (j = 0; j < 8; j++) {
+            if (crc & 0x0001) {
+                crc = (crc >> 1) ^ 0xA001; // Полином CRC-16-MODBUS: x^16 + x^15 + x^2 + 1
+            } else {
+                crc = crc >> 1;
+            }
+        }
+    }
+
+    return crc;
+}
+
+/**
+ * @brief Вычисляет MAC для фрейма
+ */
+uint32_t SecureUart_CalculateMAC(SecureUartContext *ctx, const SecureUartFrame *frame) {
+    // Простой MAC на основе Speck (в реальных системах следует использовать HMAC)
+    // Формируем блок из идентификатора сообщения и длины полезной нагрузки
+    uint32_t mac_block[2] = {frame->message_id, frame->payload_length};
+    uint32_t mac_result[2] = {0, 0};
+
+    // Шифруем блок для получения MAC
+    speck_encrypt(&ctx->key, mac_block, mac_result);
+
+    // Добавляем XOR с первым блоком зашифрованной полезной нагрузки (если есть)
+    if (frame->payload_length > 0) {
+        uint32_t *payload_blocks = (uint32_t *)frame->payload;
+        mac_result[0] ^= payload_blocks[0];
+        mac_result[1] ^= payload_blocks[1];
+    }
+
+    // Возвращаем MAC как одно 32-битное значение
+    return mac_result[0] ^ mac_result[1];
+}
+
+/**
+ * @brief Проверяет корректность принятого фрейма
+ */
+bool SecureUart_ValidateFrame(SecureUartContext *ctx, const SecureUartFrame *frame) {
+    // Проверяем магический байт
+    if (frame->magic != SECURE_UART_FRAME_MAGIC) {
+        return false;
+    }
+
+    // Проверяем длину полезной нагрузки
+    if (frame->payload_length > SECURE_UART_MAX_PAYLOAD_SIZE) {
+        return false;
+    }
+
+    // Вычисляем и проверяем CRC
+    // Для проверки CRC нам нужно воссоздать буфер с данными фрейма
+    uint8_t buffer[SECURE_UART_BUFFER_SIZE];
+    uint16_t size = 0;
+
+    buffer[size++] = frame->magic;
+
+    // Идентификатор сообщения (4 байта)
+    buffer[size++] = (frame->message_id >> 24) & 0xFF;
+    buffer[size++] = (frame->message_id >> 16) & 0xFF;
+    buffer[size++] = (frame->message_id >> 8) & 0xFF;
+    buffer[size++] = frame->message_id & 0xFF;
+
+    // Длина полезной нагрузки (2 байта)
+    buffer[size++] = (frame->payload_length >> 8) & 0xFF;
+    buffer[size++] = frame->payload_length & 0xFF;
+
+    // Копируем зашифрованную полезную нагрузку (с округлением до полных блоков)
+    uint32_t num_blocks = (frame->payload_length + 7) / 8;
+    uint16_t encrypted_size = num_blocks * 8;
+    memcpy(&buffer[size], frame->payload, encrypted_size);
+    size += encrypted_size;
+
+    // Добавляем MAC (4 байта)
+    buffer[size++] = (frame->mac >> 24) & 0xFF;
+    buffer[size++] = (frame->mac >> 16) & 0xFF;
+    buffer[size++] = (frame->mac >> 8) & 0xFF;
+    buffer[size++] = frame->mac & 0xFF;
+
+    // Вычисляем CRC и сравниваем с полученным
+    uint16_t calculated_crc = SecureUart_CalculateCRC16(buffer, size);
+    if (calculated_crc != frame->crc) {
+        return false;
+    }
+
+    // Проверяем MAC
+    uint32_t calculated_mac = SecureUart_CalculateMAC(ctx, frame);
+    if (calculated_mac != frame->mac) {
+        return false;
+    }
+
+    // Проверяем идентификатор сообщения для защиты от Replay-атак
+    if (frame->message_id <= ctx->last_rx_message_id) {
+        return false;
+    }
+
+    // Обновляем последний принятый идентификатор сообщения
+    ctx->last_rx_message_id = frame->message_id;
+
+    return true;
+}
+
+/**
+ * @brief Обрабатывает принятый фрейм, расшифровывает данные
+ */
+bool SecureUart_ProcessFrame(SecureUartContext *ctx, const SecureUartFrame *frame,
+                            uint8_t *decrypted_data, uint16_t *decrypted_size) {
+    // Расшифровываем полезную нагрузку
+    uint32_t *ct_blocks = (uint32_t *)frame->payload;
+    uint32_t num_blocks = (frame->payload_length + 7) / 8; // Округление вверх до полных блоков
+
+    for (uint32_t i = 0; i < num_blocks; i++) {
+        uint32_t encrypted[2] = {ct_blocks[i*2], ct_blocks[i*2+1]};
+        uint32_t decrypted[2];
+
+        // Расшифровываем блок
+        speck_decrypt(&ctx->key, encrypted, decrypted);
+
+        // Копируем расшифрованный блок в выходной буфер
+        uint32_t offset = i * 8;
+        uint32_t remaining = (frame->payload_length - offset < 8) ? frame->payload_length - offset : 8;
+        memcpy(&decrypted_data[offset], decrypted, remaining);
+    }
+
+    *decrypted_size = frame->payload_length;
+    return true;
+}
+
+/**
+ * @brief Логирует сообщение через UART мониторинга
+ */
+void SecureUart_Log(SecureUartContext *ctx, const char *message) {
+    if (ctx->huart_mon != NULL) {
+        HAL_UART_Transmit(ctx->huart_mon, (uint8_t *)message, strlen(message), 100);
+        HAL_UART_Transmit(ctx->huart_mon, (uint8_t *)"\r\n", 2, 100);
+    }
+}
