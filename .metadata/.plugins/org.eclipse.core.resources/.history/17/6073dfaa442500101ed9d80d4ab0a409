@@ -139,10 +139,10 @@ static void ProcessSecureUart(void) {
 			}
 		}
 		else {
-			char log_buffer[64];
-			snprintf(log_buffer, sizeof(log_buffer),
-					"Received unknown message type: %u\r\n", rx_type);
-			SecUart_Log(&secure_uart_ctx, log_buffer);
+            char log_buffer[64];
+            snprintf(log_buffer, sizeof(log_buffer),
+                    "Received unknown message type: %u\r\n", rx_type);
+            SecUart_Log(&secure_uart_ctx, log_buffer);
 		}
 	}
 }

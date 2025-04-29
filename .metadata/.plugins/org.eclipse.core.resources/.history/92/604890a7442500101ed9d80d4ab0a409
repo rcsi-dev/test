@@ -174,11 +174,8 @@ static void SecUart_PrepareFrame(SecUartContext *ctx, const uint8_t *data, uint8
 
     // Копирование данных с учетом типа сообщения
     ctx->tx_buffer[SECUART_HEADER_SIZE] = msg_type;          // Тип сообщения
+    memcpy(ctx->tx_buffer + SECUART_HEADER_SIZE + 1, data, size - 1);
 
-    // Убедимся, что мы не выходим за границы размера, особенно для ACK
-    if (size > 1) {
-        memcpy(ctx->tx_buffer + SECUART_HEADER_SIZE + 1, data, size - 1);
-    }
     // Шифрование данных
     SecUart_EncryptBlock(&ctx->cipher_ctx, ctx->tx_buffer + SECUART_HEADER_SIZE, size);
 
@@ -254,17 +251,10 @@ SecUartError SecUart_ProcessRxData(SecUartContext *ctx,
     // Дешифруем данные
     SecUart_DecryptBlock(&ctx->cipher_ctx, ctx->rx_buffer + SECUART_HEADER_SIZE, rx_size);
 
-    // Извлекаем тип сообщения
+    // Извлекаем тип сообщения и данные
     *msg_type = (SecUartMsgType)ctx->rx_buffer[SECUART_HEADER_SIZE];
-
-    // Если размер данных равен 0 или 1, то данных нет, только тип сообщения
-    if (rx_size <= 1) {
-        *size = 0;
-    } else {
-        // Иначе копируем данные без учета типа сообщения
-        *size = rx_size - 1;
-        memcpy(data, ctx->rx_buffer + SECUART_HEADER_SIZE + 1, *size);
-    }
+    *size = rx_size - 1;  // Вычитаем байт типа сообщения
+    memcpy(data, ctx->rx_buffer + SECUART_HEADER_SIZE + 1, *size);
 
     // Обновляем счетчик
     ctx->rx_counter = rx_counter;

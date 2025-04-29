@@ -2,10 +2,10 @@
 ../Core/Src/secure_uart.c:59:14:SecUart_StartReceive	16	static
 ../Core/Src/secure_uart.c:93:14:SecUart_Send	168	static
 ../Core/Src/secure_uart.c:162:13:SecUart_PrepareFrame	32	static
-../Core/Src/secure_uart.c:190:14:SecUart_ProcessRxData	176	static
-../Core/Src/secure_uart.c:282:6:SecUart_RxIdleCallback	88	static
-../Core/Src/secure_uart.c:310:6:SecUart_Log	24	static
-../Core/Src/secure_uart.c:321:13:SecUart_EncryptBlock	40	static
-../Core/Src/secure_uart.c:389:13:SecUart_DecryptBlock	40	static
-../Core/Src/secure_uart.c:457:13:SecUart_CalculateMAC	24	static
-../Core/Src/secure_uart.c:464:13:SecUart_VerifyMAC	32	static
+../Core/Src/secure_uart.c:193:14:SecUart_ProcessRxData	176	static
+../Core/Src/secure_uart.c:292:6:SecUart_RxIdleCallback	88	static
+../Core/Src/secure_uart.c:320:6:SecUart_Log	24	static
+../Core/Src/secure_uart.c:331:13:SecUart_EncryptBlock	40	static
+../Core/Src/secure_uart.c:399:13:SecUart_DecryptBlock	40	static
+../Core/Src/secure_uart.c:467:13:SecUart_CalculateMAC	24	static
+../Core/Src/secure_uart.c:474:13:SecUart_VerifyMAC	32	static
