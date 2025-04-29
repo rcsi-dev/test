@@ -54,7 +54,7 @@ uint8_t macKey[16] = {
     0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00
 };
 
-uint8_t testData[] = "Это тестовое сообщение для проверки защищенного UART протокола";
+uint8_t testData[] = "Testing message";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -82,6 +82,33 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     else if (huart->Instance == USART6) {
         SecureUart_HandleUartRxEvent(&RxContext);
     }
+}
+
+void TestDecryption() {
+    uint8_t known_plaintext[] = "Test message";
+    uint8_t known_ciphertext[32];
+    uint8_t decrypted[32];
+
+    // Шифрование
+    SpeckContext test_ctx;
+    Speck_Init(&test_ctx, encryptionKey);
+
+    SecureUart_DebugPrint(&huart2, "Тестовый ключ: ");
+    SecureUart_PrintHexBuffer(&huart2, "", encryptionKey, 16);
+
+    size_t enc_len = Speck_Encrypt_Simple(&test_ctx, known_plaintext, strlen((char*)known_plaintext), known_ciphertext);
+
+    // Расшифрование
+    size_t dec_len = Speck_Decrypt_Simple(&test_ctx, known_ciphertext, enc_len, decrypted);
+
+    // Проверка
+    decrypted[dec_len] = 0; // Добавляем нулевой символ для вывода как строки
+
+    SecureUart_DebugPrint(&huart2, "Тест расшифрования:\r\n");
+    SecureUart_DebugPrint(&huart2, "Оригинал: %s\r\n", known_plaintext);
+    SecureUart_DebugPrint(&huart2, "Расшифровано: %s\r\n", decrypted);
+    SecureUart_DebugPrint(&huart2, "Длина оригинала: %d, длина расшифрованного: %d\r\n",
+                         strlen((char*)known_plaintext), dec_len);
 }
 
 /* USER CODE END 0 */
@@ -118,8 +145,12 @@ int main(void)
     MX_USART1_UART_Init();
     MX_USART2_UART_Init();
     MX_USART6_UART_Init();
-    /* USER CODE BEGIN 2 */
 
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+    /* USER CODE BEGIN 2 */
     // Инициализация контекстов защищенного UART
     SecureUart_Init(&TxContext, &huart1, &huart2);
     SecureUart_Init(&RxContext, &huart6, &huart2);
@@ -130,6 +161,9 @@ int main(void)
 
     SecureUart_EnableMAC(&TxContext, macKey);
     SecureUart_EnableMAC(&RxContext, macKey);
+
+    Speck_Init(&TxContext.speck_ctx, encryptionKey);
+    Speck_Init(&RxContext.speck_ctx, encryptionKey);
 
     // Запуск приема в режиме DMA с IDLE прерыванием
     SecureUart_StartReceive(&TxContext);
@@ -144,38 +178,7 @@ int main(void)
     SecureUart_DebugPrint(&huart2, "MAC: SipHash 2-4\r\n");
     SecureUart_DebugPrint(&huart2, "====================================\r\n\r\n");
 
-    uint8_t test_plain[8] = "12345678";
-    uint8_t test_cipher[8];
-    uint8_t test_result[8];
-
-    // Инициализация контекста
-    SpeckContext test_ctx;
-    Speck_Init(&test_ctx, encryptionKey);
-
-    // Шифрование
-    Speck_Encrypt(&test_ctx, test_plain, test_cipher);
-
-    // Расшифрование
-    Speck_Decrypt(&test_ctx, test_cipher, test_result);
-
-    // Проверка
-    bool basic_test_ok = (memcmp(test_plain, test_result, 8) == 0);
-    SecureUart_DebugPrint(&huart2, "Тест базового Speck: %s\r\n",
-                          basic_test_ok ? "УСПЕШНО" : "ОШИБКА");
-
-    // Вывод для отладки
-    SecureUart_DebugPrint(&huart2, "Исходные данные: ");
-    for (int i = 0; i < 8; i++) {
-        SecureUart_DebugPrint(&huart2, "%02X ", test_plain[i]);
-    }
-    SecureUart_DebugPrint(&huart2, "\r\n");
-
-    SecureUart_DebugPrint(&huart2, "Результат расшифрования: ");
-    for (int i = 0; i < 8; i++) {
-        SecureUart_DebugPrint(&huart2, "%02X ", test_result[i]);
-    }
-    SecureUart_DebugPrint(&huart2, "\r\n");
-
+    TestDecryption();
     /* USER CODE END 2 */
 
     /* Infinite loop */
@@ -185,11 +188,17 @@ int main(void)
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
+    	uint32_t start = DWT->CYCCNT;
+
         // Отправка тестового сообщения
         SecureUart_Send(&TxContext, testData, strlen((char*)testData));
 
+        uint32_t cycles = DWT->CYCCNT - start;
+
+    	SecureUart_DebugPrint(&huart2, "Операция заняла %lu тактов\r\n", cycles);
+
         // Задержка 20 секунд между отправками
-        HAL_Delay(20000);
+        HAL_Delay(200000);
     }
     /* USER CODE END 3 */
 }

@@ -50,8 +50,8 @@ void Speck_Encrypt(const SpeckContext* ctx, const uint8_t* plaintext, uint8_t* c
  * @param ciphertext Указатель на буфер для зашифрованного текста
  * @return Длина зашифрованного текста в байтах (с IV и дополнением)
  */
-size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext, size_t length,
-                           const uint8_t* iv, uint8_t* ciphertext);
+size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext,
+		size_t length, uint8_t* ciphertext);
 
 /**
  * @brief Упрощенное расшифрование данных произвольной длины
@@ -63,8 +63,8 @@ size_t Speck_Encrypt_Simple(const SpeckContext* ctx, const uint8_t* plaintext, s
  * @param plaintext Указатель на буфер для расшифрованного текста
  * @return Длина расшифрованного текста в байтах (без дополнения)
  */
-size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext, size_t length,
-                           const uint8_t* iv, uint8_t* plaintext);
+size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext,
+		size_t length, uint8_t* plaintext);
 
 /**
  * @brief Вычисление размера дополненного текста
@@ -73,5 +73,8 @@ size_t Speck_Decrypt_Simple(const SpeckContext* ctx, const uint8_t* ciphertext, 
  * @return Длина дополненного текста
  */
 size_t Speck_GetPaddedLength(size_t length);
+
+size_t remove_pkcs7_padding(uint8_t* data, size_t data_len);
+void add_pkcs7_padding(uint8_t* data, size_t data_len, size_t block_size);
 
 #endif /* SPECK_H_ */
