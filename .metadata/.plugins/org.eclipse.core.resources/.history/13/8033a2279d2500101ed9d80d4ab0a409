@@ -26,7 +26,7 @@
 /* USER CODE BEGIN PD */
 #define TX_PERIOD_MS       30000   // Период отправки сообщений (30 секунд)
 #define DATA_BUFFER_SIZE   64      // Размер буфера данных
-#define TEST_SIZE          64
+#define TEST_SIZE          8
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -212,7 +212,7 @@ static void SendPeriodicMessage(void) {
 		// Формируем тестовое сообщение
 		uint8_t msg_data[TEST_SIZE] = {0};
 
-		memcpy(msg_data, test_dataXL, TEST_SIZE);
+		memcpy(msg_data, test_dataS, TEST_SIZE);
 
         // Используем реальную длину строки + 1 (для типа сообщения)
         uint8_t msg_size = TEST_SIZE + 1;

@@ -15,8 +15,6 @@ static void SecUart_CalculateMAC(const SpeckContext *ctx, const uint8_t *data, u
 static bool SecUart_VerifyMAC(const SpeckContext *ctx, const uint8_t *data, uint8_t size, const uint8_t *mac);
 static void SecUart_PrepareFrame(SecUartContext *ctx, const uint8_t *data, uint8_t size, SecUartMsgType msg_type);
 
-extern UART_HandleTypeDef huart2;
-
 /**
  * @brief Инициализация контекста защищенного UART
  */
@@ -124,9 +122,7 @@ SecUartError SecUart_Send(SecUartContext *ctx,
 	}
 
 	// Подготовка фрейма для отправки
-	uint32_t t0_prep = DWT->CYCCNT;
 	SecUart_PrepareFrame(ctx, data, size, msg_type);
-	uint32_t t1_prep = DWT->CYCCNT - t0_prep;
 
 	// Общий размер фрейма: заголовок + размер данных + MAC
 	uint16_t frame_size = SECUART_HEADER_SIZE + size + SECUART_MAC_SIZE;
@@ -135,19 +131,7 @@ SecUartError SecUart_Send(SecUartContext *ctx,
 	ctx->tx_complete = false;
 
 	// Отправка данных по DMA
-	uint32_t t0_send = DWT->CYCCNT;
 	HAL_StatusTypeDef hal_status = HAL_UART_Transmit_DMA(ctx->huart_tx, ctx->tx_buffer, frame_size);
-	uint32_t t1_send = DWT->CYCCNT - t0_send;
-
-    char cycles_msg1[64];
-    char cycles_msg2[64];
-
-    sprintf(cycles_msg1, "Cycles used (PREPARING): %lu\r\n", t1_prep);
-    sprintf(cycles_msg2, "Cycles used (SENDING): %lu\r\n", t1_send);
-
-    HAL_UART_Transmit(&huart2, (uint8_t*)cycles_msg1, strlen(cycles_msg1), 100);
-    HAL_UART_Transmit(&huart2, (uint8_t*)cycles_msg2, strlen(cycles_msg2), 100);
-
 	if (hal_status != HAL_OK) {
 		// Выводим код ошибки HAL для диагностики
 		char err_buf[64];
@@ -193,11 +177,6 @@ static void SecUart_PrepareFrame(SecUartContext *ctx, const uint8_t *data, uint8
 
 	// Убедимся, что мы не выходим за границы размера, особенно для ACK
 	if (size > 1) {
-        uint8_t data_size = size - 1;
-        if (data_size > SECUART_MAX_DATA_SIZE - 1) {
-            data_size = SECUART_MAX_DATA_SIZE - 1;
-        }
-
 		memcpy(ctx->tx_buffer + SECUART_HEADER_SIZE + 1, data, size - 1);
 	}
 	// Шифрование данных
@@ -260,7 +239,6 @@ SecUartError SecUart_ProcessRxData(SecUartContext *ctx,
 	}
 
 	// Проверяем MAC
-	uint32_t t0_mac = DWT->CYCCNT;
 	uint8_t *rx_mac = ctx->rx_buffer + SECUART_HEADER_SIZE + rx_size;
 	bool mac_valid = SecUart_VerifyMAC(&ctx->cipher_ctx,
 			ctx->rx_buffer,
@@ -272,21 +250,9 @@ SecUartError SecUart_ProcessRxData(SecUartContext *ctx,
 		SecUart_Log(ctx, "ERR: Invalid MAC\r\n");
 		return SECUART_ERR_INVALID_MAC;
 	}
-	uint32_t t1_mac = DWT->CYCCNT - t0_mac;
 
 	// Дешифруем данные
-	uint32_t t0_enc = DWT->CYCCNT;
 	SecUart_DecryptBlock(&ctx->cipher_ctx, ctx->rx_buffer + SECUART_HEADER_SIZE, rx_size);
-	uint32_t t1_enc = DWT->CYCCNT - t0_enc;
-
-    char cycles_msg1[64];
-    char cycles_msg2[64];
-
-    sprintf(cycles_msg1, "Cycles used (MAC): %lu\r\n", t1_mac);
-    sprintf(cycles_msg2, "Cycles used (ENCRYPTION): %lu\r\n", t1_enc);
-
-    HAL_UART_Transmit(&huart2, (uint8_t*)cycles_msg1, strlen(cycles_msg1), 100);
-    HAL_UART_Transmit(&huart2, (uint8_t*)cycles_msg2, strlen(cycles_msg2), 100);
 
 	// Извлекаем тип сообщения
 	*msg_type = (SecUartMsgType)ctx->rx_buffer[SECUART_HEADER_SIZE];
@@ -297,14 +263,7 @@ SecUartError SecUart_ProcessRxData(SecUartContext *ctx,
 	} else {
 		// Иначе копируем данные без учета типа сообщения
 		*size = rx_size - 1;
-
-        if (*size > 0) {
-            memcpy(data, ctx->rx_buffer + SECUART_HEADER_SIZE + 1, *size);
-            // Для текстовых данных добавляем завершающий нуль
-            if (data != NULL && *msg_type == SECUART_MSG_DATA) {
-                data[*size] = '\0';
-            }
-        }
+		memcpy(data, ctx->rx_buffer + SECUART_HEADER_SIZE + 1, *size);
 	}
 
 	// Обновляем счетчик

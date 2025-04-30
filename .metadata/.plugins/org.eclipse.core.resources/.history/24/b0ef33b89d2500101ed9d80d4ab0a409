@@ -212,7 +212,7 @@ static void SendPeriodicMessage(void) {
 		// Формируем тестовое сообщение
 		uint8_t msg_data[TEST_SIZE] = {0};
 
-		memcpy(msg_data, test_dataXL, TEST_SIZE);
+		memcpy(msg_data, test_dataL, TEST_SIZE);
 
         // Используем реальную длину строки + 1 (для типа сообщения)
         uint8_t msg_size = TEST_SIZE + 1;

@@ -124,9 +124,7 @@ SecUartError SecUart_Send(SecUartContext *ctx,
 	}
 
 	// Подготовка фрейма для отправки
-	uint32_t t0_prep = DWT->CYCCNT;
 	SecUart_PrepareFrame(ctx, data, size, msg_type);
-	uint32_t t1_prep = DWT->CYCCNT - t0_prep;
 
 	// Общий размер фрейма: заголовок + размер данных + MAC
 	uint16_t frame_size = SECUART_HEADER_SIZE + size + SECUART_MAC_SIZE;
@@ -135,19 +133,7 @@ SecUartError SecUart_Send(SecUartContext *ctx,
 	ctx->tx_complete = false;
 
 	// Отправка данных по DMA
-	uint32_t t0_send = DWT->CYCCNT;
 	HAL_StatusTypeDef hal_status = HAL_UART_Transmit_DMA(ctx->huart_tx, ctx->tx_buffer, frame_size);
-	uint32_t t1_send = DWT->CYCCNT - t0_send;
-
-    char cycles_msg1[64];
-    char cycles_msg2[64];
-
-    sprintf(cycles_msg1, "Cycles used (PREPARING): %lu\r\n", t1_prep);
-    sprintf(cycles_msg2, "Cycles used (SENDING): %lu\r\n", t1_send);
-
-    HAL_UART_Transmit(&huart2, (uint8_t*)cycles_msg1, strlen(cycles_msg1), 100);
-    HAL_UART_Transmit(&huart2, (uint8_t*)cycles_msg2, strlen(cycles_msg2), 100);
-
 	if (hal_status != HAL_OK) {
 		// Выводим код ошибки HAL для диагностики
 		char err_buf[64];

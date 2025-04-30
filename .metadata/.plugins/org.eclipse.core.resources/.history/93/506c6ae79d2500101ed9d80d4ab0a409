@@ -25,8 +25,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define TX_PERIOD_MS       30000   // Период отправки сообщений (30 секунд)
-#define DATA_BUFFER_SIZE   64      // Размер буфера данных
-#define TEST_SIZE          64
+#define DATA_BUFFER_SIZE   128      // Размер буфера данных
+#define TEST_SIZE          128
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
